@@ -31,8 +31,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show Xcode
-        run: xcodebuild -version
+      - name: Use the newest Xcode (Godot 4.7 needs the iOS 26 SDK)
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_*.app | sed -E 's/.*Xcode_([0-9.]+)(.*)\.app/\1 &/' | sort -V | tail -n 1 | cut -d' ' -f2-)
+          echo "Selecting $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos
 
       - name: Download Godot and its export templates
         run: |
