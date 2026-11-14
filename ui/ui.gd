@@ -6,7 +6,27 @@ extends RefCounted
 static var scale: float = 1.0
 
 
+## Design size the whole interface is laid out for. On phones and tablets
+## the UI is scaled so this fits the screen (landscape), instead of being
+## sized from the screen's pixel density.
+const MOBILE_FIT := Vector2(1440, 840)
+
+
 static func init_scale(override: float = 0.0) -> void:
+	if Platform.is_mobile():
+		var win := Vector2(DisplayServer.window_get_size())
+		if win.x <= 0.0 or win.y <= 0.0:
+			win = Vector2(DisplayServer.screen_get_size())
+		var safe := Vector2(DisplayServer.get_display_safe_area().size)
+		if safe.x > 0.0 and safe.y > 0.0:
+			win = win.min(safe)
+		var w := maxf(win.x, win.y)
+		var h := minf(win.x, win.y)
+		var fit := minf(w / MOBILE_FIT.x, h / MOBILE_FIT.y)
+		# The Interface size setting is relative to "fits the screen" here.
+		var rel := override if override > 0.0 else 1.0
+		scale = clampf(fit * rel, 0.6, 4.0)
+		return
 	if override > 0.0:
 		scale = clampf(override, 0.75, 3.0)
 		return
@@ -14,10 +34,6 @@ static func init_scale(override: float = 0.0) -> void:
 	var dpi := DisplayServer.screen_get_dpi()
 	var from_dpi := float(dpi) / 96.0 if dpi > 0 else 1.0
 	scale = clampf(snappedf(maxf(s, from_dpi), 0.25), 1.0, 2.5)
-	if Platform.is_mobile():
-		# The window is in physical pixels (Retina ×2 / ×3); size the UI in
-		# points, a little larger than desktop so fingers hit things easily.
-		scale = clampf(maxf(s, 1.0) * 1.1, 1.25, 3.5)
 
 
 static func px(v: float) -> float:

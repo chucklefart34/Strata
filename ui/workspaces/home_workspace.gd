@@ -12,7 +12,7 @@ const RESOLUTIONS := [
 	["Vertical — 1080 × 1920", 1080, 1920],
 ]
 const FPS := [12, 15, 24, 25, 30]
-const UI_SCALES := [["Automatic", 0.0], ["100%", 1.0], ["125%", 1.25], ["150%", 1.5], ["175%", 1.75], ["200%", 2.0]]
+const UI_SCALES := [["Automatic", 0.0], ["75%", 0.75], ["90%", 0.9], ["100%", 1.0], ["125%", 1.25], ["150%", 1.5], ["175%", 1.75], ["200%", 2.0]]
 const STEPS := [
 	["Draw", "Create a project, then draw your character and background on separate layers in Draw."],
 	["Animate", "In Animate, add drawings frame by frame with onion skin, and retime them in the timeline."],
@@ -177,11 +177,15 @@ func _ready() -> void:
 			sel = i
 	var scale_names := []
 	for sc in UI_SCALES:
-		scale_names.append(sc[0])
+		var label := str(sc[0])
+		if Platform.is_mobile():
+			# On phones/tablets sizes are relative to "fits the screen".
+			label = "Fit screen" if float(sc[1]) <= 0.0 else label + " of fit"
+		scale_names.append(label)
 	var scale_opt := UI.option(scale_names, sel)
 	scale_opt.item_selected.connect(func(i: int) -> void:
 		ProjectIO.set_setting("ui_scale", UI_SCALES[i][1])
-		App.status("Interface size changes apply the next time Strata starts"))
+		App.status("Interface size changes apply the next time Strata starts" + (" (swipe it closed, then open it again)" if Platform.is_mobile() else "")))
 	pr.add_child(scale_opt)
 	var reset_tips := UI.button("Show all tips again", "help", "", "FlatButton")
 	reset_tips.pressed.connect(func() -> void:

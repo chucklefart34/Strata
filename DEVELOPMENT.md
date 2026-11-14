@@ -66,6 +66,12 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — mobile UI fits the screen
+
+- **Fitting the screen:** on iPad and iPhone the interface is now scaled so a 1440 × 840 design area fits the screen's safe area (landscape), instead of being sized from pixel density (×2.2 before). For example, an 11-inch iPad goes from about 2.2× to about 1.7× and everything fits.
+- **Notch and corners:** the whole UI is inset to `DisplayServer.get_display_safe_area()`, so nothing sits under the camera housing, rounded corners or home indicator.
+- **Interface size setting:** new 75% and 90% options. On mobile the setting is relative to the fit ("Fit screen", "90% of fit"…), so you can zoom out further or back in.
+
 ## Update — CapCut-style Export, GitHub iOS builds
 
 ### Completed

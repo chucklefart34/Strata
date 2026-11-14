@@ -40,7 +40,8 @@ func _ready() -> void:
 	get_tree().root.theme = t
 	RenderingServer.set_default_clear_color(Palette.BG)
 	get_tree().set_auto_accept_quit(false)
-	get_window().min_size = Vector2i(int(UI.px(1280)), int(UI.px(720)))
+	if not Platform.is_mobile():
+		get_window().min_size = Vector2i(int(UI.px(1280)), int(UI.px(720)))
 	get_window().title = "Strata Animation Studio"
 	UI.full_rect(self)
 	_build()
@@ -67,6 +68,10 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 0)
 	UI.full_rect(root)
 	add_child(root)
+	if Platform.is_mobile():
+		# Keep the interface clear of the camera housing and rounded corners.
+		_apply_safe_area(root)
+		get_viewport().size_changed.connect(_apply_safe_area.bind(root))
 
 	# ---------------------------------------------------------- top bar
 	var top := PanelContainer.new()
@@ -303,6 +308,19 @@ func _apply_project_kind() -> void:
 		b.visible = used.has(id)
 	if _current != "" and not used.has(_current):
 		switch_to("draw" if App.has_project() else "home")
+
+
+func _apply_safe_area(root: Control) -> void:
+	var win := Vector2(DisplayServer.window_get_size())
+	var safe := Rect2(DisplayServer.get_display_safe_area())
+	if safe.size.x <= 0.0 or safe.size.y <= 0.0 or win.x <= 0.0:
+		return
+	# Viewport units can differ from window pixels if stretching is ever on.
+	var k := get_viewport_rect().size / win
+	root.offset_left = safe.position.x * k.x
+	root.offset_top = safe.position.y * k.y
+	root.offset_right = -(win.x - safe.end.x) * k.x
+	root.offset_bottom = -(win.y - safe.end.y) * k.y
 
 
 # ---------------------------------------------------------------- touch: long-press = right-click
