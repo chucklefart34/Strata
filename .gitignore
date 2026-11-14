@@ -1,0 +1,10 @@
+# Godot 4 generated files
+.godot/
+/android/
+# Local tools (e.g. bundled ffmpeg)
+/tools/ffmpeg*
+
+# Exports
+build/
+renders/
+exports/

@@ -1,0 +1,101 @@
+name: Build iOS app (.ipa)
+
+# Builds an UNSIGNED Strata.ipa on a macOS runner every time main changes (or
+# when run by hand from the Actions tab). Install it on your iPad/iPhone with
+# Sideloadly or AltStore, which sign it with your own Apple ID; see BUILD_IOS.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      godot_version:
+        description: "Godot version to build with"
+        default: "4.7.2"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: ${{ github.event.inputs.godot_version || '4.7.2' }}
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode
+        run: xcodebuild -version
+
+      - name: Download Godot and its export templates
+        run: |
+          set -euo pipefail
+          V="${GODOT_VERSION}-stable"
+          BASE="https://github.com/godotengine/godot/releases/download/${V}"
+          echo "Downloading Godot ${V}"
+          curl -fsSL --retry 3 -o godot.zip "${BASE}/Godot_v${V}_macos.universal.zip"
+          unzip -q godot.zip
+          curl -fsSL --retry 3 -o templates.tpz "${BASE}/Godot_v${V}_export_templates.tpz"
+          TDIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$TDIR"
+          unzip -q templates.tpz
+          mv templates/* "$TDIR/"
+          ls "$TDIR" | grep -i ios
+          echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+
+      - name: Import the project
+        run: |
+          "$GODOT" --headless --path . --import || "$GODOT" --headless --path . --editor --quit-after 300 || true
+          test -d .godot
+
+      - name: Export the Xcode project from Godot
+        run: |
+          set -euo pipefail
+          # CI exports the Xcode project only; signing is skipped below.
+          sed -i '' 's/^application\/export_project_only=.*/application\/export_project_only=true/' export_presets.cfg
+          sed -i '' 's/^application\/app_store_team_id=.*/application\/app_store_team_id="UNSIGNED00"/' export_presets.cfg
+          mkdir -p build/ios
+          "$GODOT" --headless --path . --export-release "iOS" build/ios/Strata.ipa
+          ls build/ios
+
+      - name: Build the app with Xcode (unsigned)
+        working-directory: build/ios
+        run: |
+          set -euo pipefail
+          PROJ=$(ls -d *.xcodeproj | head -n 1)
+          SCHEME=$(xcodebuild -list -project "$PROJ" | awk '/Schemes:/{getline; gsub(/^ +/, ""); print; exit}')
+          echo "Project: $PROJ  Scheme: $SCHEME"
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/Strata.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            | tail -n 40
+          APP=$(ls -d Strata.xcarchive/Products/Applications/*.app | head -n 1)
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry Strata-unsigned.ipa Payload
+          ls -lh Strata-unsigned.ipa
+
+      - name: Upload the .ipa (Actions artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Strata-ios-unsigned
+          path: build/ios/Strata-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish to the "iOS build" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-latest --yes --cleanup-tag || true
+          gh release create ios-latest build/ios/Strata-unsigned.ipa \
+            --title "iOS build (unsigned) — ${GITHUB_SHA::7}" \
+            --notes "Unsigned build of $(date -u +%Y-%m-%d). Install with Sideloadly or AltStore using your Apple ID (see BUILD_IOS.md)." \
+            --prerelease --target "$GITHUB_SHA"
