@@ -39,11 +39,11 @@ func _ready() -> void:
 	var clr := UI.icon_button("reset", "Remove all camera keys")
 	clr.pressed.connect(Ops.clear_camera)
 	keys.add_child(clr)
-	_c["x"] = UI.slider(sec, "Pan left / right", -3000, 3000, 1, 0, _set.bind("x"), "%d px")
-	_c["y"] = UI.slider(sec, "Pan up / down", -3000, 3000, 1, 0, _set.bind("y"), "%d px")
+	_c["x"] = UI.slider(sec, "Pan left / right", -3000, 3000, 1, 0, _set_cam.bind("x"), "%d px")
+	_c["y"] = UI.slider(sec, "Pan up / down", -3000, 3000, 1, 0, _set_cam.bind("y"), "%d px")
 	_c["zoom"] = UI.slider(sec, "Zoom", 25, 400, 1, 100, _on_zoom, "%d%%")
-	_c["roll"] = UI.slider(sec, "Rotate", -45, 45, 0.5, 0, _set.bind("roll"), "%.1f°")
-	_c["shake"] = UI.slider(sec, "Shake", 0, 60, 0.5, 0, _set.bind("shake"), "%.1f px")
+	_c["roll"] = UI.slider(sec, "Rotate", -45, 45, 0.5, 0, _set_cam.bind("roll"), "%.1f°")
+	_c["shake"] = UI.slider(sec, "Shake", 0, 60, 0.5, 0, _set_cam.bind("shake"), "%.1f px")
 	var ease_row := UI.hbox(6)
 	sec.add_child(ease_row)
 	ease_row.add_child(UI.label("Motion to next key", "FieldLabel"))
@@ -66,13 +66,13 @@ func _ready() -> void:
 	_sync()
 
 
-func _set(value: Variant, field: String) -> void:
+func _set_cam(value: Variant, field: String) -> void:
 	if not _syncing and App.has_project():
 		Ops.set_camera_field(field, value)
 
 
 func _on_zoom(v: float) -> void:
-	_set(v / 100.0, "zoom")
+	_set_cam(v / 100.0, "zoom")
 
 
 func _sync() -> void:
