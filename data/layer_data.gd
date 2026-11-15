@@ -31,6 +31,10 @@ var offset: Vector2 = Vector2.ZERO
 var scale: float = 1.0
 var rotation_deg: float = 0.0
 var keep_size: bool = true
+## Line boil: how much the drawing wobbles (0 = still, 1 = strong), and how
+## many frames each wobble lasts (1 = every frame … 4).
+var boil: float = 0.0
+var boil_speed: int = 2
 ## 3D orientation: turn = around the vertical axis, tilt = lean back/forward.
 var turn_deg: float = 0.0
 var tilt_deg: float = 0.0
@@ -166,6 +170,22 @@ func exposure_end(key: int, frame_count: int) -> int:
 	return maxi(end, key + 1)
 
 
+## True when this layer's drawing should wobble (characters never do).
+func has_boil() -> bool:
+	return boil > 0.001 and not is_character()
+
+
+## Which wobble to show at `frame`: changes every `boil_speed` frames and
+## differs per layer, so layers don't wobble in sync.
+func boil_step(frame: int) -> float:
+	return float(floori(float(frame) / maxi(1, boil_speed))) + float(absi(hash(id)) % 97) * 13.0
+
+
+## Wobble size in canvas pixels.
+func boil_pixels() -> float:
+	return boil * 4.0
+
+
 func to_dict() -> Dictionary:
 	var cel_list := []
 	for k in sorted_keys():
@@ -187,6 +207,8 @@ func to_dict() -> Dictionary:
 		"tilt": tilt_deg,
 		"lit": lit,
 		"cast_shadow": cast_shadow,
+		"boil": boil,
+		"boil_speed": boil_speed,
 		"cels": cel_list,
 		"motion_keys": KeyTrack.to_list(motion_keys, MOTION_FIELDS, static_motion()),
 		"character_id": character_id,
@@ -231,6 +253,8 @@ static func from_dict(d: Dictionary, cel_dir: String) -> LayerData:
 	l.tilt_deg = float(d.get("tilt", 0.0))
 	l.lit = bool(d.get("lit", false))
 	l.cast_shadow = bool(d.get("cast_shadow", true))
+	l.boil = clampf(float(d.get("boil", 0.0)), 0.0, 1.0)
+	l.boil_speed = clampi(int(d.get("boil_speed", 2)), 1, 4)
 	l.motion_keys = KeyTrack.from_list(d.get("motion_keys", []), MOTION_FIELDS, l.static_motion())
 	l.character_id = str(d.get("character_id", ""))
 	l.pose_keys = _list_to_dict_track(d.get("pose_keys", []))
@@ -260,6 +284,8 @@ func clone_deep() -> LayerData:
 	l.tilt_deg = tilt_deg
 	l.lit = lit
 	l.cast_shadow = cast_shadow
+	l.boil = boil
+	l.boil_speed = boil_speed
 	l.motion_keys = motion_keys.duplicate(true)
 	l.character_id = character_id
 	l.pose_keys = pose_keys.duplicate(true)

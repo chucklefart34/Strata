@@ -69,7 +69,11 @@ The spec recommends making the first milestone "drawing studio + animation timel
 ## Update — hand-drawn tools, 2D camera, library and lip sync, better roto and background removal
 
 ### Completed
-- **Line boil** episode effect ("Hand-drawn" group). It wobbles the picture slightly and changes the wobble every 1–4 frames (Speed), so held drawings feel hand-traced.
+- **Line boil, per layer** (replaces the earlier episode effect).
+  - In the Layers panel: **Line boil** amount (0–100%) and **New wobble every** 1–4 frames.
+  - The canvas now draws each layer as its own canvas item (`CanvasView.LayerItem`, with overlays in `TopItem`), so a layer can carry the boil shader (`shaders/layer_boil.gdshader`).
+  - Drawing planes in 3D, renders and episodes use `shaders/layer_boil_3d.gdshader`, so the boil is in the output too.
+  - Each layer wobbles differently (seeded by layer id) and only changes on its step frames. Characters, and lit layers in 3D, don't boil.
 - **2D camera in Animate** (`ui/panels/camera_panel.gd`):
   - Pan, zoom, rotate and shake keys, ease, and preset moves, all on the scene camera keys, so renders use them.
   - **View through camera** frames the canvas exactly like the final picture (`CanvasView.camera_xform`, folded into `view_xform`), and you can keep drawing in that view.

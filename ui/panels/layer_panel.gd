@@ -12,6 +12,8 @@ const ROLE_LABELS := {
 var _list: VBoxContainer
 var _name_edit: LineEdit
 var _opacity: HSlider
+var _boil: HSlider
+var _boil_speed: OptionButton
 var _role: OptionButton
 var _import_dialog: FileDialog
 var _import_as_reference: bool = false
@@ -68,6 +70,18 @@ func _ready() -> void:
 	_role.item_selected.connect(_on_role)
 	props.add_child(_role)
 	_opacity = UI.slider(props, "Opacity", 0, 100, 1, 100, _on_opacity, "%d%%")
+	_boil = UI.slider(props, "Line boil (hand-drawn wobble)", 0, 100, 1, 0, _on_boil, "%d%%")
+	_boil.tooltip_text = "Makes this layer's lines wobble slightly, with a new wobble every few frames — like each frame was traced again by hand. Held drawings stop looking frozen. 0 = still."
+	var bs_row := UI.hbox(6)
+	props.add_child(bs_row)
+	bs_row.add_child(UI.label("New wobble every", "FieldLabel"))
+	_boil_speed = UI.option(["1 frame", "2 frames", "3 frames", "4 frames"], 1)
+	_boil_speed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_boil_speed.item_selected.connect(func(i: int) -> void:
+		var l := App.current_layer()
+		if l != null:
+			Ops.set_layer_prop(l, "boil_speed", i + 1))
+	bs_row.add_child(_boil_speed)
 
 	for sig: Signal in [App.project_opened, App.scene_switched, App.layers_changed, App.layer_selected, App.stage_changed]:
 		sig.connect(_rebuild)
@@ -99,6 +113,10 @@ func _rebuild() -> void:
 		if not _name_edit.has_focus():
 			_name_edit.text = active.name
 		UI.set_slider(_opacity, float(active.motion_at(App.frame)["opacity"]) * 100.0)
+		UI.set_slider(_boil, active.boil * 100.0)
+		_boil_speed.select(clampi(active.boil_speed - 1, 0, 3))
+		_boil.editable = not active.is_character()
+		_boil_speed.disabled = active.is_character() or active.boil <= 0.001
 		var role_idx := ROLE_LABELS.keys().find(active.role)
 		_role.select(maxi(0, role_idx))
 
@@ -214,6 +232,12 @@ func _on_role(idx: int) -> void:
 		return
 	var role: String = ROLE_LABELS.keys()[idx]
 	Ops.set_layer_prop(l, "role", role)
+
+
+func _on_boil(v: float) -> void:
+	var l := App.current_layer()
+	if l != null and not l.is_character():
+		Ops.set_layer_prop(l, "boil", v / 100.0)
 
 
 func _on_opacity(v: float) -> void:

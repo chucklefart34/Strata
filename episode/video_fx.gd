@@ -35,7 +35,6 @@ const EFFECTS := [
 	["vignette", "Vignette", "Color", "Size", true, 3.0, 0.7],
 	["flash", "Flash", "Color", "", true, 0.25, 1.0],
 	["bars", "Cinema bars", "Frame", "", false, 3.0, 0.8],
-	["boil", "Line boil", "Hand-drawn", "Speed", false, 10.0, 0.5],
 ]
 
 const MAX_ACTIVE := 8

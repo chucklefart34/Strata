@@ -25,6 +25,9 @@ var _fit_pending: bool = true
 var _checker: ImageTexture
 var _onion_view: OnionView
 var _art_view: ArtView
+var _layer_items: Array[LayerItem] = []
+var _top_item: TopItem
+const BOIL_SHADER := preload("res://shaders/layer_boil.gdshader")
 
 var _panning: bool = false
 var _pan_with_left: bool = false
@@ -89,7 +92,25 @@ class ArtView extends Control:
 	var canvas: CanvasView
 
 	func _draw() -> void:
-		canvas.draw_art(self)
+		canvas.draw_under(self)
+
+
+## One layer of the drawing, as its own canvas item so it can have its own
+## material (line boil). Drawn above ArtView, in layer order.
+class LayerItem extends Control:
+	var canvas: CanvasView
+	var index: int = 0
+
+	func _draw() -> void:
+		canvas.draw_layer_item(self, index)
+
+
+## Everything drawn over the layers: guides, camera frame, selection, cursor.
+class TopItem extends Control:
+	var canvas: CanvasView
+
+	func _draw() -> void:
+		canvas.draw_over(self)
 
 
 func _ready() -> void:
@@ -118,7 +139,7 @@ func _ready() -> void:
 	mouse_entered.connect(func() -> void: _hovering = true)
 	mouse_exited.connect(func() -> void:
 		_hovering = false
-		_art_view.queue_redraw())
+		_redraw_art())
 	App.project_opened.connect(func() -> void:
 		_fit_pending = true
 		_on_resized())
@@ -167,13 +188,13 @@ func _guide_texture() -> Texture2D:
 
 func _on_guide_updated() -> void:
 	if is_visible_in_tree():
-		_art_view.queue_redraw()
+		_redraw_art()
 
 
 func refresh() -> void:
 	queue_redraw()
 	_onion_view.queue_redraw()
-	_art_view.queue_redraw()
+	_redraw_art()
 
 
 func _make_checker() -> ImageTexture:
@@ -320,13 +341,99 @@ func draw_onion(ci: CanvasItem) -> void:
 		ci.draw_texture(cel.get_texture(), Vector2.ZERO, c)
 
 
-func draw_art(ci: CanvasItem) -> void:
+## Under the layers: the 3D set guide when it sits behind the drawings.
+func draw_under(ci: CanvasItem) -> void:
 	if not App.has_project():
 		return
 	var cs := canvas_size()
 	ci.draw_set_transform_matrix(view_xform())
+	var guide := _guide_texture()
+	if guide != null:
+		var s := App.current_scene()
+		if not bool(s.stage_value("draw_guide_front")):
+			ci.draw_texture_rect(guide, Rect2(Vector2.ZERO, cs), false, Color(1, 1, 1, clampf(float(s.stage_value("draw_guide_opacity")), 0.0, 1.0)))
+
+
+## Draws layer number `i` (bottom first) of the current view into `ci`.
+func draw_layer_item(ci: CanvasItem, i: int) -> void:
+	if not App.has_project():
+		return
+	var layers := _layers()
+	if i >= layers.size():
+		return
+	var layer: LayerData = layers[i]
+	if not layer.visible:
+		return
+	ci.draw_set_transform_matrix(view_xform())
+	var tex: Texture2D = null
+	if layer.is_character():
+		tex = Rigs.texture_for(layer)
+	else:
+		var cel := layer.cel_at(_frame_for(layer))
+		if cel != null:
+			tex = cel.get_texture()
+	if tex == null:
+		return
 	var active := _active_layer()
-	var moving := _active and App.tool == "move"
+	var pos := Vector2.ZERO
+	if _active and App.tool == "move" and layer == active:
+		pos = move_offset.round()
+	var op := layer.opacity
+	if provider == null:
+		op = clampf(float(layer.motion_at(App.frame)["opacity"]), 0.0, 1.0)
+	elif layer != active:
+		op *= provider.inactive_opacity()
+	if layer.is_reference():
+		op = minf(op, 0.6)
+	ci.draw_texture(tex, pos, Color(1, 1, 1, op))
+
+
+## Redraws the whole drawing: one canvas item per layer (each with its line
+## boil material if it has one) plus the overlay item on top.
+func _redraw_art() -> void:
+	if _art_view == null:
+		return
+	var layers := _layers() if App.has_project() else []
+	while _layer_items.size() < layers.size():
+		var it := LayerItem.new()
+		it.canvas = self
+		it.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		it.index = _layer_items.size()
+		_art_view.add_child(it)
+		_layer_items.append(it)
+	if _top_item == null:
+		_top_item = TopItem.new()
+		_top_item.canvas = self
+		_top_item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_art_view.add_child(_top_item)
+	_art_view.move_child(_top_item, _art_view.get_child_count() - 1)
+	for i in _layer_items.size():
+		var it: LayerItem = _layer_items[i]
+		it.visible = i < layers.size()
+		if i < layers.size():
+			var layer: LayerData = layers[i]
+			if layer.has_boil() and provider == null:
+				var mat := it.material as ShaderMaterial
+				if mat == null:
+					mat = ShaderMaterial.new()
+					mat.shader = BOIL_SHADER
+					it.material = mat
+				mat.set_shader_parameter("amount", layer.boil_pixels())
+				mat.set_shader_parameter("step_k", layer.boil_step(_frame_for(layer)))
+				mat.set_shader_parameter("tex_size", canvas_size())
+			else:
+				it.material = null
+		it.queue_redraw()
+	_top_item.queue_redraw()
+	_art_view.queue_redraw()
+
+
+## Over the layers: front guide, camera frame, shapes, selection and cursor.
+func draw_over(ci: CanvasItem) -> void:
+	if not App.has_project():
+		return
+	var cs := canvas_size()
+	ci.draw_set_transform_matrix(view_xform())
 	var guide := _guide_texture()
 	var guide_front := false
 	var guide_op := 1.0
@@ -334,32 +441,6 @@ func draw_art(ci: CanvasItem) -> void:
 		var s := App.current_scene()
 		guide_front = bool(s.stage_value("draw_guide_front"))
 		guide_op = clampf(float(s.stage_value("draw_guide_opacity")), 0.0, 1.0)
-		if not guide_front:
-			ci.draw_texture_rect(guide, Rect2(Vector2.ZERO, cs), false, Color(1, 1, 1, guide_op))
-	for item in _layers():
-		var layer: LayerData = item
-		if not layer.visible:
-			continue
-		var tex: Texture2D = null
-		if layer.is_character():
-			tex = Rigs.texture_for(layer)
-		else:
-			var cel := layer.cel_at(_frame_for(layer))
-			if cel != null:
-				tex = cel.get_texture()
-		if tex == null:
-			continue
-		var pos := Vector2.ZERO
-		if moving and layer == active:
-			pos = move_offset.round()
-		var op := layer.opacity
-		if provider == null:
-			op = clampf(float(layer.motion_at(App.frame)["opacity"]), 0.0, 1.0)
-		elif layer != active:
-			op *= provider.inactive_opacity()
-		if layer.is_reference():
-			op = minf(op, 0.6)
-		ci.draw_texture(tex, pos, Color(1, 1, 1, op))
 	if guide != null and guide_front:
 		ci.draw_texture_rect(guide, Rect2(Vector2.ZERO, cs), false, Color(1, 1, 1, guide_op))
 	_draw_camera_frame(ci, cs)
@@ -431,7 +512,7 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		if _active:
 			_continue(cursor, _read_pressure(mm))
-		_art_view.queue_redraw()
+		_redraw_art()
 	elif event is InputEventPanGesture:
 		var pg := event as InputEventPanGesture
 		pan -= pg.delta * UI.px(18)
@@ -638,7 +719,7 @@ func _begin(pos: Vector2, pressure: float) -> void:
 		_start = pos
 		move_offset = Vector2.ZERO
 		_active = true
-	_art_view.queue_redraw()
+	_redraw_art()
 
 
 ## Pressure for a drag event. Mouse drags (never any pressure) count as full
@@ -941,7 +1022,7 @@ func _sel_continue(pos: Vector2) -> void:
 				else:
 					d.x = (1.0 if d.x >= 0.0 else -1.0) * absf(d.y) * aspect
 			float_rect = Rect2(opposite, Vector2.ZERO).expand(opposite + d)
-	_art_view.queue_redraw()
+	_redraw_art()
 
 
 func _sel_end() -> void:

@@ -93,6 +93,8 @@ var _t_center: Vector2 = Vector2.ZERO
 var _t_dist: float = 1.0
 
 var _planes: Dictionary = {}  # layer.id -> MeshInstance3D
+var _boil_mats: Dictionary = {}  # layer.id -> ShaderMaterial (line boil)
+const BOIL_SHADER := preload("res://shaders/layer_boil_3d.gdshader")
 var _structure: String = ""
 var _helpers_mesh: ImmediateMesh
 var _grid_mesh: ImmediateMesh
@@ -439,10 +441,7 @@ func rebuild() -> void:
 		var q := QuadMesh.new()
 		q.size = qs
 		mi.mesh = q
-		var mat := StandardMaterial3D.new()
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-		mi.material_override = mat
+		mi.material_override = _plane_material()
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		# Shadow-only twin with a hard alpha cutoff, so shadows follow the
 		# painted pixels instead of the whole rectangle.
@@ -479,10 +478,34 @@ func refresh() -> void:
 		var tex := _layer_texture(layer)
 		var m := layer_motion(layer, App.frame)
 		mi.visible = layer.visible and tex != null and not layer.is_reference()
+		var op := clampf(float(m["opacity"]), 0.0, 1.0)
+		# Line boil: unlit drawing layers use a wobbling shader instead.
+		if layer.has_boil() and not layer.lit:
+			var bm: ShaderMaterial = _boil_mats.get(layer.id)
+			if bm == null:
+				bm = ShaderMaterial.new()
+				bm.shader = BOIL_SHADER
+				_boil_mats[layer.id] = bm
+			bm.set_shader_parameter("tex", tex)
+			bm.set_shader_parameter("opacity", op)
+			bm.set_shader_parameter("amount", layer.boil_pixels())
+			bm.set_shader_parameter("step_k", layer.boil_step(App.frame))
+			bm.set_shader_parameter("tex_size", Vector2(App.project.width, App.project.height))
+			mi.material_override = bm
+		else:
+			if not (mi.material_override is StandardMaterial3D):
+				mi.material_override = _plane_material()
 		var mat := mi.material_override as StandardMaterial3D
+		if mat == null:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var shb: MeshInstance3D = mi.get_node("Shadow")
+			shb.visible = layer.cast_shadow and op > 0.05
+			if tex != null:
+				(shb.material_override as StandardMaterial3D).albedo_texture = tex
+			mi.transform = layer_transform(layer, i, m)
+			continue
 		if tex != null:
 			mat.albedo_texture = tex
-		var op := clampf(float(m["opacity"]), 0.0, 1.0)
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL if layer.lit else BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.roughness = 1.0
 		mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
@@ -505,6 +528,13 @@ func refresh() -> void:
 	_draw_helpers()
 	if guide_wanted:
 		request_guide()
+
+
+func _plane_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	return mat
 
 
 func _layer_texture(layer: LayerData) -> Texture2D:
