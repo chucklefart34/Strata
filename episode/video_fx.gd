@@ -14,7 +14,7 @@ const EFFECTS := [
 	["crt", "CRT TV", "Retro", "Curve", false, 3.0, 0.7],
 	["grain", "Film grain", "Retro", "Grain size", false, 3.0, 0.5],
 	["glitch", "Glitch", "Glitch", "Chaos", false, 1.0, 0.7],
-	["datamosh", "Datamosh", "Glitch", "Melt", false, 2.0, 0.9],
+	["datamosh", "Datamosh", "Glitch", "Melt (stretch & bloom)", false, 2.5, 0.85],
 	["gross", "Gross / crunchy", "Glitch", "Block size", false, 2.0, 0.8],
 	["deepfried", "Deep fried", "Glitch", "", false, 1.5, 0.8],
 	["rgbsplit", "RGB split", "Glitch", "Direction", false, 1.0, 0.6],

@@ -16,6 +16,8 @@ uniform float frame = 0.0;
 uniform vec2 res = vec2(1920.0, 1080.0);
 uniform bool has_prev = false;
 uniform float seed = 0.0;
+uniform sampler2D motion_tex : filter_linear, repeat_disable;   // from video_motion.gdshader (Datamosh)
+uniform float max_motion = 48.0;
 
 float h1(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 0.1371) * 43758.5453);
@@ -110,27 +112,27 @@ void fragment() {
 		k = mix(k, 1.0 - k, inv);
 		c = k;
 	} else if (fx == 5) {
-		// Datamosh: last frame's picture is pushed around by this frame's
-		// motion instead of being replaced, so old images melt into new ones.
+		// Datamosh, built like a video codec with its keyframes deleted:
+		//   picture = last frame's picture moved by this frame's motion
+		//             + the residual (what changed that motion doesn't explain).
+		// Where the residual is huge (a cut, something new appearing) it is
+		// thrown away, as if the keyframe were missing, so the old picture
+		// keeps flowing with the new motion and new detail bleeds in.
 		if (!has_prev) {
 			c = base;
 		} else {
-			float B = 16.0 * ps;
-			vec2 cell = floor(uv * res / B);
-			vec2 bp = (cell + 0.5) * B / res;
-			vec2 dx = vec2(B * px.x * 0.5, 0.0);
-			vec2 dy = vec2(0.0, B * px.y * 0.5);
-			float ic = luma(texture(screen_tex, bp).rgb);
-			float ix = luma(texture(screen_tex, bp + dx).rgb) - luma(texture(screen_tex, bp - dx).rgb);
-			float iy = luma(texture(screen_tex, bp + dy).rgb) - luma(texture(screen_tex, bp - dy).rgb);
-			float it = ic - luma(texture(prev_src, bp).rgb);
-			vec2 g = vec2(ix, iy);
-			vec2 v = -it * g / (dot(g, g) + 0.002);
-			v = clamp(v, vec2(-2.5), vec2(2.5)) * vec2(dx.x, dy.y) * (1.0 + param * 4.0);
-			vec3 old = texture(prev_out, clamp(uv - v, vec2(0.0), vec2(1.0))).rgb;
-			float iframe = step(0.988 + 0.012 * amount, h1(cell + floor(frame) * 0.71));
-			float refresh = (1.0 - amount) * 0.3;
-			c = mix(old, base, clamp(refresh + iframe, 0.0, 1.0));
+			vec2 d = (texture(motion_tex, uv).rg - 0.5) * 2.0 * max_motion;   // 1080p pixels, smooth (bilinear)
+			vec2 duv = d * ps * px;
+			float melt = 1.0 + param * 2.5;   // > 1: motion is exaggerated, pixels bloom and stretch
+			vec3 moved = texture(prev_out, clamp(uv - duv * melt, vec2(0.0), vec2(1.0))).rgb;
+			vec3 predicted = texture(prev_src, clamp(uv - duv, vec2(0.0), vec2(1.0))).rgb;
+			vec3 residual = base - predicted;
+			float r = length(residual);
+			float thr = mix(0.55, 0.05, amount);
+			float keep = 1.0 - smoothstep(thr * 0.6, thr, r);   // drop "keyframe" changes
+			c = moved + residual * keep;
+			// A little leak back to the real picture so it never fully freezes.
+			c = mix(c, base, (1.0 - amount) * 0.06);
 		}
 	} else if (fx == 6) {
 		// Gross / crunchy: a badly compressed video — blocky colour, banding,

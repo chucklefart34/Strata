@@ -9,14 +9,22 @@ extends Node
 
 const MAX_PASSES := VideoFx.MAX_ACTIVE
 const SHADER := preload("res://shaders/video_fx.gdshader")
+const MOTION_SHADER := preload("res://shaders/video_motion.gdshader")
+const DATAMOSH := 5     # VideoFx index of Datamosh
+const MAX_MOTION := 48.0
 
 var _out: Array[SubViewport] = []
 var _src: Array[SubViewport] = []
 var _base: Array[TextureRect] = []
 var _src_rect: Array[TextureRect] = []
 var _passes: Array = []  # per output viewport: Array of [BackBufferCopy, ColorRect]
+## Motion vectors for Datamosh, one per output viewport. Each is a child of
+## its output viewport, so it is drawn first in the same frame.
+var _motion: Array[SubViewport] = []
+var _motion_rect: Array[ColorRect] = []
 var _cur: int = 0
 var _hist_valid: bool = false
+var _motion_valid: bool = false
 var _last_frame: int = -999
 var _size := Vector2i(16, 16)
 
@@ -50,6 +58,19 @@ func _ready() -> void:
 		_out.append(out_vp)
 		_base.append(base)
 		_passes.append(passes)
+		var mvp := SubViewport.new()
+		mvp.disable_3d = true
+		mvp.transparent_bg = false
+		mvp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		out_vp.add_child(mvp)
+		out_vp.move_child(mvp, 0)
+		var mr := ColorRect.new()
+		var mm := ShaderMaterial.new()
+		mm.shader = MOTION_SHADER
+		mr.material = mm
+		mvp.add_child(mr)
+		_motion.append(mvp)
+		_motion_rect.append(mr)
 	setup(_size.x, _size.y)
 
 
@@ -76,12 +97,21 @@ func setup(w: int, h: int) -> void:
 			var p: Array = pair
 			var rect: ColorRect = p[1]
 			rect.size = s
+		# One motion vector per 8×8 block at 1080p, whatever the resolution.
+		var ms := Vector2i(maxi(8, int(ceil(_size.x / (8.0 * _ps())))), maxi(8, int(ceil(_size.y / (8.0 * _ps())))))
+		_motion[i].size = ms
+		_motion_rect[i].size = Vector2(ms)
 	reset()
+
+
+func _ps() -> float:
+	return maxf(0.05, _size.y / 1080.0)
 
 
 ## Forget the previous frame (after a jump in time).
 func reset() -> void:
 	_hist_valid = false
+	_motion_valid = false
 	_last_frame = -999
 
 
@@ -102,6 +132,23 @@ func process(src: Texture2D, active: Array, frame: int, fps: int) -> Texture2D:
 	var j := 1 - i
 	_src_rect[i].texture = src
 	_base[i].texture = src
+	var moshing := false
+	for item in active:
+		var a0: Dictionary = item
+		if int(a0["index"]) == DATAMOSH:
+			moshing = true
+	if moshing:
+		var mmat := _motion_rect[i].material as ShaderMaterial
+		mmat.set_shader_parameter("cur_tex", src)
+		mmat.set_shader_parameter("prev_tex", _src[j].get_texture())
+		mmat.set_shader_parameter("prev_motion", _motion[j].get_texture())
+		mmat.set_shader_parameter("res", Vector2(_size))
+		mmat.set_shader_parameter("ps", _ps())
+		mmat.set_shader_parameter("max_motion", MAX_MOTION)
+		mmat.set_shader_parameter("has_prev", _hist_valid)
+		mmat.set_shader_parameter("has_prev_motion", _hist_valid and _motion_valid)
+		_motion[i].render_target_update_mode = SubViewport.UPDATE_ONCE
+	_motion_valid = moshing and _hist_valid
 	var passes: Array = _passes[i]
 	for k in MAX_PASSES:
 		var pair: Array = passes[k]
@@ -126,6 +173,8 @@ func process(src: Texture2D, active: Array, frame: int, fps: int) -> Texture2D:
 		mat.set_shader_parameter("seed", float(hash(str(e.get("id", ""))) % 997))
 		mat.set_shader_parameter("prev_out", _out[j].get_texture())
 		mat.set_shader_parameter("prev_src", _src[j].get_texture())
+		mat.set_shader_parameter("motion_tex", _motion[i].get_texture())
+		mat.set_shader_parameter("max_motion", MAX_MOTION)
 	_out[i].render_target_update_mode = SubViewport.UPDATE_ONCE
 	_src[i].render_target_update_mode = SubViewport.UPDATE_ONCE
 	_hist_valid = true

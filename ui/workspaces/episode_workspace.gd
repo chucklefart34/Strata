@@ -854,6 +854,13 @@ func _build_fx_props() -> void:
 	var fit := UI.button("Fit to shot", "fit", "Make the effect cover the whole shot under the playhead", "FlatButton")
 	fit.pressed.connect(_fit_fx_to_shot)
 	trow.add_child(fit)
+	if type == "datamosh":
+		var cut := UI.button("Mosh the next cut", "next", "Start just before the next cut, so the old shot melts into the new shot's movement (the classic datamosh)", "AccentButton")
+		cut.pressed.connect(_mosh_next_cut)
+		tsec.add_child(cut)
+		var how := UI.label("Datamosh works like a video file with its keyframes deleted: the picture keeps flowing with the motion instead of being replaced. Put it over a cut and the old shot moves with the new one. Melt exaggerates the motion so pixels stretch and bloom; Intensity sets how much new detail is let through.", "Small")
+		how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tsec.add_child(how)
 
 	var arow := UI.hbox(6)
 	_props.add_child(arow)
@@ -878,6 +885,33 @@ func _build_fx_props() -> void:
 
 func _on_fx_spin(v: float, field: String) -> void:
 	_fx_set(field, int(v))
+
+
+func _mosh_next_cut() -> void:
+	if episode == null:
+		return
+	var sched := episode.schedule(App.project)
+	var cut := -1
+	for item in sched:
+		var s: Dictionary = item
+		var st := int(s["start"])
+		if st > _frame and int(s["index"]) > 0:
+			cut = st
+			break
+	if cut < 0:
+		App.status("No cut after the playhead — move the playhead before a cut")
+		return
+	var fps: int = App.project.fps
+	var after := episode.effects.duplicate(true)
+	for x in after:
+		var d: Dictionary = x
+		if str(d.get("id", "")) == _selected_fx:
+			d["start"] = maxi(0, cut - 2)
+			d["length"] = maxi(int(d.get("length", fps * 2)), fps * 2)
+			d["fade_in"] = 0
+	Ops.set_effects(episode, after, "Datamosh the cut")
+	_stop()
+	_seek(maxi(0, cut - 2))
 
 
 func _fit_fx_to_shot() -> void:
