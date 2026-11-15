@@ -66,6 +66,15 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — Windows build on GitHub
+
+- **Export preset:** `export_presets.cfg` has a **Windows** preset (x86_64, PCK embedded in the exe, no rcedit needed).
+- **The `windows` job** in `.github/workflows/build.yml` (Ubuntu runner):
+  - Exports `Strata.exe` with the Linux editor and the Windows templates.
+  - Adds `ffmpeg/ffmpeg.exe` (BtbN GPL build, with its licence) so video import and MP4/MOV/GIF export work without setup. The FFmpeg locator already looks in an `ffmpeg/` folder next to the exe.
+  - Zips `Strata.exe`, `ffmpeg/` and `README.txt` into `Strata-windows.zip`. It's uploaded as an artifact and to the rolling `windows-latest` prerelease.
+- The workflow file is now `build.yml` ("Build apps (Windows + iOS)"). Both app jobs wait for the compile check.
+
 ## Update — episode video effects
 
 ### Completed

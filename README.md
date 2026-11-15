@@ -1,5 +1,7 @@
 # Strata Animation Studio
 
+**Downloads:** every push to `main` builds the apps on GitHub: **Windows** (`Strata-windows.zip` under *Releases › Windows build*: unzip and run `Strata.exe`, with FFmpeg included) and **iPad/iPhone** (*Releases › iOS build*).
+
 **iPad / iPhone:** the project is ready to export for iOS — see [BUILD_IOS.md](BUILD_IOS.md) for making the `.ipa` on a Mac.
 
 When you start a project, choose **2D**, **2D + 3D** (adds the Depth stage) or **Stop motion** (shoot frames with a camera or add photos, with onion skin, then draw over them).
