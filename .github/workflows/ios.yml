@@ -38,13 +38,15 @@ jobs:
           curl -fsSL --retry 3 -o godot.zip "https://github.com/godotengine/godot/releases/download/${V}/Godot_v${V}_linux.x86_64.zip"
           unzip -q godot.zip
           echo "GODOT=$PWD/Godot_v${V}_linux.x86_64" >> "$GITHUB_ENV"
-      - name: Import and launch headless
+      - name: Import, compile everything, and launch headless
         run: |
           "$GODOT" --headless --path . --import > import.log 2>&1 || true
+          timeout 120 "$GODOT" --headless --path . --script res://tools/ci_check.gd > compile.log 2>&1 || true
           timeout 120 "$GODOT" --headless --path . --quit-after 240 > run.log 2>&1 || true
-          cat import.log run.log | grep -E "SCRIPT ERROR|Parse Error|Failed to load|Compile Error|Invalid|ERROR" -A3 | head -n 200 || true
-          if grep -qE "SCRIPT ERROR|Parse Error|Failed to load script|Compile Error" import.log run.log; then
-            echo "::error::Script errors found (see above)"
+          tail -n 3 compile.log
+          cat import.log compile.log run.log | grep -E "SCRIPT ERROR|SHADER ERROR|Parse Error|CHECK FAILED|Failed to load|Compile Error|ERROR:" -A4 | head -n 300 || true
+          if grep -qE "SCRIPT ERROR|SHADER ERROR|Parse Error|CHECK FAILED|Failed to load script|Compile Error|Shader compilation failed" import.log compile.log run.log; then
+            echo "::error::Script or shader errors found (see above)"
             exit 1
           fi
 

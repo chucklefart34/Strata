@@ -41,11 +41,14 @@ float luma(vec3 c) {
 	return dot(c, vec3(0.299, 0.587, 0.114));
 }
 
-vec3 blur3(sampler2D t, vec2 uv, vec2 px) {
+// Godot can't pass the built-in TEXTURE and a uniform sampler to the same
+// helper function, so the plate gets its own blur and the frame is blurred
+// inline in fragment().
+vec3 blur3_plate(vec2 uv, vec2 px) {
 	vec3 s = vec3(0.0);
 	for (int j = -1; j <= 1; j++) {
 		for (int i = -1; i <= 1; i++) {
-			s += texture(t, uv + vec2(float(i), float(j)) * px).rgb;
+			s += texture(plate, uv + vec2(float(i), float(j)) * px).rgb;
 		}
 	}
 	return s / 9.0;
@@ -62,8 +65,14 @@ void fragment() {
 	float m = 1.0;
 	if (mode == 1) {
 		vec2 px = TEXTURE_PIXEL_SIZE * 1.5;
-		vec3 a = blur3(TEXTURE, UV, px);
-		vec3 b = blur3(plate, UV, px);
+		vec3 a = vec3(0.0);
+		for (int j = -1; j <= 1; j++) {
+			for (int i = -1; i <= 1; i++) {
+				a += texture(TEXTURE, UV + vec2(float(i), float(j)) * px).rgb;
+			}
+		}
+		a /= 9.0;
+		vec3 b = blur3_plate(UV, px);
 		vec3 d = abs(a - b);
 		float diff = max(max(d.r, d.g), d.b);
 		m = smoothstep(threshold, threshold + softness, diff);
