@@ -123,7 +123,8 @@ func _ready() -> void:
 		_fit_pending = true
 		_on_resized())
 	for sig: Signal in [App.scene_switched, App.layers_changed, App.layer_selected, App.frame_changed,
-			App.pixels_changed, App.onion_changed, App.timeline_changed, App.tool_changed, App.stage_changed]:
+			App.pixels_changed, App.onion_changed, App.timeline_changed, App.tool_changed, App.stage_changed,
+			App.camera_changed, App.camera_view_changed]:
 		sig.connect(refresh)
 	# A floating selection is applied before the context it belongs to changes.
 	for sig: Signal in [App.scene_switched, App.layer_selected, App.frame_changed, App.project_closed]:
@@ -131,6 +132,21 @@ func _ready() -> void:
 	App.tool_changed.connect(func() -> void:
 		if not SELECT_TOOLS.has(App.tool):
 			commit_floating())
+
+
+## Outline of what the camera sees (when not already viewing through it),
+## once the scene's camera has been moved or animated.
+func _draw_camera_frame(ci: CanvasItem, cs: Vector2) -> void:
+	if provider != null or App.camera_view or not App.has_project():
+		return
+	var s := App.current_scene()
+	if s == null or s.camera_keys.is_empty():
+		return
+	var inv := camera_xform(_frame_for(null)).affine_inverse()
+	var pts := PackedVector2Array([inv * Vector2.ZERO, inv * Vector2(cs.x, 0), inv * cs, inv * Vector2(0, cs.y), inv * Vector2.ZERO])
+	var w := 2.0 / maxf(0.05, zoom)
+	ci.draw_polyline(pts, Color(Palette.DEPTH, 0.9), w)
+	ci.draw_string(get_theme_default_font(), pts[0] + Vector2(6, 16) / maxf(0.05, zoom), "CAMERA", HORIZONTAL_ALIGNMENT_LEFT, -1, int(12.0 / maxf(0.05, zoom)), Palette.DEPTH)
 
 
 ## The Depth set rendered through the scene camera (Draw/Animate only), or null.
@@ -178,7 +194,31 @@ func canvas_size() -> Vector2:
 
 func view_xform() -> Transform2D:
 	var cs := canvas_size()
-	return Transform2D(deg_to_rad(rotation_deg), Vector2(zoom, zoom), 0.0, size * 0.5 + pan) * Transform2D(0.0, -cs * 0.5)
+	var xf := Transform2D(deg_to_rad(rotation_deg), Vector2(zoom, zoom), 0.0, size * 0.5 + pan) * Transform2D(0.0, -cs * 0.5)
+	if App.camera_view and provider == null:
+		xf = xf * camera_xform(_frame_for(null))
+	return xf
+
+
+## Canvas → canvas transform that frames the drawing like the scene camera
+## at `frame` (pan, zoom, dolly, roll, shake), as in the flat 2D render.
+func camera_xform(frame: int) -> Transform2D:
+	if not App.has_project() or App.current_scene() == null:
+		return Transform2D.IDENTITY
+	var s := App.current_scene()
+	var st := s.camera_at(frame)
+	var x: float = st["x"]
+	var y: float = st["y"]
+	var shake: float = st["shake"]
+	if shake > 0.0:
+		x += (sin(frame * 12.9898) * 0.6 + sin(frame * 4.1414 + 1.3) * 0.4) * shake
+		y += (cos(frame * 9.7310) * 0.6 + cos(frame * 3.3700 + 0.7) * 0.4) * shake
+	var z := maxf(0.05, float(st["zoom"]))
+	if DepthView.instance != null:
+		var d := DepthView.instance.base_dist()
+		z *= d / maxf(0.5, d - float(st["dolly"]))
+	var c := canvas_size() * 0.5
+	return Transform2D(0.0, c) * Transform2D(deg_to_rad(-float(st["roll"])), Vector2(z, z), 0.0, Vector2.ZERO) * Transform2D(0.0, -(c + Vector2(x, y)))
 
 
 func to_canvas(screen_pos: Vector2) -> Vector2:
@@ -322,6 +362,7 @@ func draw_art(ci: CanvasItem) -> void:
 		ci.draw_texture(tex, pos, Color(1, 1, 1, op))
 	if guide != null and guide_front:
 		ci.draw_texture_rect(guide, Rect2(Vector2.ZERO, cs), false, Color(1, 1, 1, guide_op))
+	_draw_camera_frame(ci, cs)
 	ci.draw_rect(Rect2(Vector2.ZERO, cs), Color(0, 0, 0, 0.25), false, -1.0)
 	if provider != null:
 		provider.draw_overlay(ci, self)

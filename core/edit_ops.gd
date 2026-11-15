@@ -1709,6 +1709,73 @@ func set_entry_field(ep: EpisodeData, index: int, field: String, value: Variant)
 	_entries_action("Edit %s (%s)" % [field.replace("_", " "), str(cur.get("id", ""))], ep, after, true)
 
 
+# ---------------------------------------------------------------- drawing library
+
+func _set_library(items: Array, cels: Dictionary) -> void:
+	App.project.library = items.duplicate(true)
+	App.project.library_cels = cels.duplicate()
+	App.notify("library")
+
+
+func _library_action(label: String, items: Array, cels: Dictionary) -> void:
+	var p := App.project
+	ur.create_action(label)
+	ur.add_do_method(_set_library.bind(items, cels))
+	ur.add_undo_method(_set_library.bind(p.library.duplicate(true), p.library_cels.duplicate()))
+	ur.commit_action()
+
+
+## Saves a copy of `cel` into the project library. Replaces an item with the
+## same name and category. Returns the item id.
+func save_to_library(cel: CelData, item_name: String, category: String) -> String:
+	var p := App.project
+	var items := p.library.duplicate(true)
+	var cels := p.library_cels.duplicate()
+	var existing := p.library_find(category, item_name)
+	var id := str(existing.get("id", "")) if not existing.is_empty() else Ids.make()
+	var copy := CelData.new(id)
+	copy.image = cel.get_image().duplicate() as Image
+	copy.mark_changed()
+	cels[id] = copy
+	if existing.is_empty():
+		items.append({"id": id, "name": item_name, "category": category})
+	_library_action("Save “%s” to library" % item_name, items, cels)
+	return id
+
+
+func remove_from_library(id: String) -> void:
+	var p := App.project
+	var items: Array = []
+	for item in p.library:
+		var it: Dictionary = item
+		if str(it["id"]) != id:
+			items.append(it.duplicate())
+	var cels := p.library_cels.duplicate()
+	cels.erase(id)
+	_library_action("Remove from library", items, cels)
+
+
+## Puts copies of library drawings on `layer`: placements = [[frame, id], …],
+## each held until the next one. One undo step.
+func place_library(layer: LayerData, placements: Array, label: String) -> void:
+	var p := App.project
+	var after := layer.cels.duplicate()
+	var last := 0
+	for pl in placements:
+		var pair: Array = pl
+		var f: int = pair[0]
+		var src: CelData = p.library_cels.get(str(pair[1]))
+		if src == null:
+			continue
+		var cel := CelData.create_blank(p.width, p.height)
+		cel.image = src.get_image().duplicate() as Image
+		cel.mark_changed()
+		after[f] = cel
+		last = maxi(last, f + 1)
+	var s := App.current_scene()
+	_cels_action(label, layer, after, maxi(s.frame_count, last))
+
+
 # ---------------------------------------------------------------- episode effects
 
 func _set_effects(ep: EpisodeData, arr: Array) -> void:

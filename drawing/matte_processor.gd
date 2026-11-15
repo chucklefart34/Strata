@@ -10,7 +10,7 @@ const KEY_SHADER := preload("res://shaders/matte_key.gdshader")
 const CLEAN_SHADER := preload("res://shaders/matte_clean.gdshader")
 const MEDIAN_SHADER := preload("res://shaders/matte_median.gdshader")
 
-const MODES := ["everything", "background", "colour", "light", "dark", "subject"]
+const MODES := ["everything", "background", "colour", "light", "dark", "subject", "object", "auto"]
 
 var _tex: ImageTexture
 var _source: TextureRect
@@ -78,14 +78,17 @@ func setup(w: int, h: int, settings: Dictionary) -> void:
 	_clean_rect.size = Vector2(size)
 	var k := h / 1080.0
 	var mode_name := str(settings.get("mode", "everything"))
-	_key_mat.set_shader_parameter("mode", maxi(0, MODES.find(mode_name)))
+	var shader_mode := maxi(0, MODES.find(mode_name))
+	if mode_name == "object" or mode_name == "auto":
+		shader_mode = 5  # same subject-mask path; "object" is then inverted
+	_key_mat.set_shader_parameter("mode", shader_mode)
 	_key_mat.set_shader_parameter("plate", _plate_tex)
 	_key_mat.set_shader_parameter("threshold", float(settings.get("threshold", 0.12)))
 	_key_mat.set_shader_parameter("softness", float(settings.get("softness", 0.06)))
 	var kc: Color = settings.get("key_color", Color(0, 1, 0))
 	_key_mat.set_shader_parameter("key_color", Vector3(kc.r, kc.g, kc.b))
 	_key_mat.set_shader_parameter("spill", float(settings.get("spill", 0.6)))
-	_key_mat.set_shader_parameter("invert", bool(settings.get("invert", false)))
+	_key_mat.set_shader_parameter("invert", bool(settings.get("invert", false)) != (mode_name == "object"))
 	if bool(settings.get("crop", false)):
 		var b: Rect2 = settings.get("box", Rect2(0, 0, 1, 1))
 		_key_mat.set_shader_parameter("box", Vector4(b.position.x, b.position.y, b.end.x, b.end.y))

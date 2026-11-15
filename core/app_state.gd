@@ -12,6 +12,8 @@ signal frame_changed
 signal pixels_changed
 signal timeline_changed
 signal camera_changed
+signal camera_view_changed
+signal library_changed
 signal stage_changed
 signal tool_changed
 signal brush_changed
@@ -38,6 +40,8 @@ var frame: int = 0
 var playing: bool = false
 var loop_playback: bool = true
 var onion_enabled: bool = true
+## Draw/Animate canvas shows the picture framed by the scene camera.
+var camera_view: bool = false
 var onion_before: int = 2
 var onion_after: int = 1
 
@@ -69,6 +73,11 @@ func is_3d() -> bool:
 
 func is_stop_motion() -> bool:
 	return project != null and project.mode == "stopmotion"
+
+
+func set_camera_view(on: bool) -> void:
+	camera_view = on
+	camera_view_changed.emit()
 
 
 func has_project() -> bool:
@@ -303,6 +312,9 @@ func notify(kind: String) -> void:
 		"clips":
 			mark_modified()
 			clips_changed.emit()
+		"library":
+			mark_modified()
+			library_changed.emit()
 		"characters":
 			mark_modified()
 			characters_changed.emit()

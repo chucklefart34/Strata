@@ -285,6 +285,44 @@ func probability(img: Image, area: Rect2 = Rect2(0, 0, 1, 1)) -> PackedFloat32Ar
 	return out
 
 
+## Automatic background removal (no picking): colours seen along the left,
+## right and top edges of the frame are background, colours in the middle
+## are probably the subject; refined twice like GrabCut.
+func build_auto_model(img: Image) -> void:
+	var work := work_image(img)
+	var w := work.get_width()
+	var h := work.get_height()
+	var data := work.get_data()
+	var fg := PackedFloat32Array()
+	var bg := PackedFloat32Array()
+	fg.resize(BINS)
+	bg.resize(BINS)
+	var inner := Rect2(0.2, 0.12, 0.6, 0.8)
+	for y in h:
+		var v := (y + 0.5) / h
+		for x in w:
+			var u := (x + 0.5) / w
+			var i := (y * w + x) * 4
+			if data[i + 3] < 8:
+				continue
+			var bin := ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4)
+			var edge := minf(minf(u, 1.0 - u), v)
+			if edge < 0.06:
+				bg[bin] += 1.0
+			elif 1.0 - v < 0.04:
+				bg[bin] += 0.3  # subjects are often cut off at the bottom
+			elif inner.has_point(Vector2(u, v)):
+				var c := (Vector2(u, v) - Vector2(0.5, 0.55)) / Vector2(0.3, 0.4)
+				fg[bin] += maxf(0.0, 1.0 - c.length_squared())
+	_make_lut(fg, bg)
+	for it in 2:
+		var fg2 := PackedFloat32Array()
+		fg2.resize(BINS)
+		var bg2 := bg.duplicate()
+		_refine(work, Rect2(0.06, 0.05, 0.88, 0.95), fg2, bg2)
+		_make_lut(fg2, bg2)
+
+
 # ================================================================ tracking
 
 ## Tracks across proxy frames [i_from, i_to]. `frame_at(index)` returns the
@@ -444,7 +482,7 @@ func _mean_shift(img: Image, box: Rect2) -> Dictionary:
 # ================================================================ mask
 
 ## Low-res mask (FORMAT_L8, work size) of the subject in `img` at `box`.
-func support_mask(img: Image, box: Rect2, cut: float = 0.5) -> Image:
+func support_mask(img: Image, box: Rect2, cut: float = 0.5, fallback: bool = true) -> Image:
 	var work := work_image(img)
 	var w := work.get_width()
 	var h := work.get_height()
@@ -468,7 +506,7 @@ func support_mask(img: Image, box: Rect2, cut: float = 0.5) -> Image:
 	# loosen the cut, and failing that keep an oval inside the box, so a
 	# subject is never wiped out completely.
 	var box_px := maxf(1.0, box.size.x * w * box.size.y * h)
-	if _count(m) < box_px * 0.03:
+	if fallback and _count(m) < box_px * 0.03:
 		for y in h:
 			var v := (y + 0.5) / h
 			for x in w:

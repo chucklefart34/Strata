@@ -66,6 +66,28 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — hand-drawn tools, 2D camera, library and lip sync, better roto and background removal
+
+### Completed
+- **Line boil** episode effect ("Hand-drawn" group). It wobbles the picture slightly and changes the wobble every 1–4 frames (Speed), so held drawings feel hand-traced.
+- **2D camera in Animate** (`ui/panels/camera_panel.gd`):
+  - Pan, zoom, rotate and shake keys, ease, and preset moves, all on the scene camera keys, so renders use them.
+  - **View through camera** frames the canvas exactly like the final picture (`CanvasView.camera_xform`, folded into `view_xform`), and you can keep drawing in that view.
+  - Otherwise a CAMERA outline shows what the camera sees once the camera is animated.
+  - Works in 2D projects; flat render, with dolly treated as zoom.
+- **Drawing library** (`ui/panels/library_panel.gd`; `ProjectData.library` + `library_cels`, saved in `library/`):
+  - Save the current drawing with a name and group, then click to place a copy on the current layer at the playhead, in any scene.
+  - Undoable (`Ops.save_to_library / remove_from_library / place_library`).
+- **Lip sync** (Animate):
+  - Mouth chart with 8 shapes (Rest, M B P, A I, E, O, U W, F V, L). Click to save a mouth from the current drawing, or once saved, click to place it and move ahead by "Each mouth lasts". Right-click or press-and-hold replaces a mouth.
+  - **Auto lip-sync from dialogue** reads the clip's volume per step and places closed, small and open mouths with syllable variety. Missing shapes fall back to similar ones. It's one undo step.
+- **Rotoscope lines follow movement:** the "Steady over time" pass is now motion-aware (block motion from `video_motion.gdshader`).
+  - Still areas are held, so there's no flicker.
+  - In moving areas the held result is moved along with the motion, and anything that really changed is redrawn from the new frame. Lines stay on the moving subject instead of sticking or lagging.
+- **Background remover:** the Keep menu is reordered and has two new modes.
+  - **Remove the background automatically (keeps the main subject):** no picking. Colours along the left, right and top edges of the frame are treated as background and the middle as the subject (GrabCut-style refinement). The model is re-learned every 1.5 s of video, then cleaned per frame (blob filter, hole fill) and refined at the edge at full resolution.
+  - **Remove an object I pick:** the subject tracker (box, + / − marks, Track) with the mask inverted, so the object is cut out of every frame.
+
 ## Update — Windows build on GitHub
 
 - **Export preset:** `export_presets.cfg` has a **Windows** preset (x86_64, PCK embedded in the exe, no rcedit needed).

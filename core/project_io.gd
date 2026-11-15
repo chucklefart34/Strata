@@ -143,6 +143,7 @@ func _cel_dirs(p: ProjectData, root: String) -> Array:
 		out.append([s.prop_paint, root.path_join("scenes").path_join(s.id).path_join("props")])
 	for c in p.clips:
 		out.append([c.cels, root.path_join("clips").path_join(c.id)])
+	out.append([p.library_cels, root.path_join("library")])
 	for ch in p.characters:
 		for v in ch.views.keys():
 			for pt in ch.views[v]:

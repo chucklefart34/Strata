@@ -101,6 +101,20 @@ var _press_pos: Vector2 = Vector2.ZERO
 var _press_down: bool = false
 var _box_drag: bool = false
 var _want_result: bool = false
+## Elements "Keep" choices in menu order: [label, matte mode].
+const KEEP := [
+	["Everything", "everything"],
+	["Remove the background automatically (keeps the main subject)", "auto"],
+	["Keep a subject I pick (tracked through the clip)", "subject"],
+	["Remove an object I pick (tracked through the clip)", "object"],
+	["Moving subjects (remove a still background)", "background"],
+	["Everything except a colour (green screen / colour key)", "colour"],
+	["Remove light areas (white paper, sky)", "light"],
+	["Remove dark areas (black backgrounds)", "dark"],
+]
+const AUTO_RELEARN := 1.5  # seconds between re-learning the background (auto mode)
+var _auto_tracker := SubjectTracker.new()
+var _auto_key: int = -999
 var _frames_btn: Button
 var _frames_dialog: FileDialog
 var _result_mode: bool = false  # the person wants to see the result (live)
@@ -633,7 +647,17 @@ func _matted(img: Image) -> Image:
 ## Runs the matte on one canvas-sized frame shot at time `t` (seconds). For
 ## a tracked subject it first works out that frame's subject mask.
 func _matte_frame(img: Image, t: float, settings: Dictionary) -> Image:
-	if str(settings["mode"]) == "subject":
+	if str(settings["mode"]) == "auto":
+		# Re-learn what the background looks like every so often, so it keeps
+		# working when the shot changes.
+		var key := int(floor(t / AUTO_RELEARN))
+		if key != _auto_key or _auto_tracker.lut_image == null:
+			_auto_tracker.build_auto_model(img)
+			_auto_key = key
+		var amask := _auto_tracker.support_mask(img, Rect2(0, 0, 1, 1), float(settings["threshold"]), false)
+		_matte.set_subject(_auto_tracker.lut_image, amask)
+		return await _matte.process(img)
+	if str(settings["mode"]) == "subject" or str(settings["mode"]) == "object":
 		if _tracker.lut_image == null and _tracker.has_keys():
 			_tracker.build_model(_proxy_image_at_time)
 		if _tracker.lut_image != null:
@@ -716,16 +740,13 @@ func _build_elements(parent: Control) -> void:
 	var row := UI.hbox(8)
 	parent.add_child(row)
 	row.add_child(UI.label("Keep", "FieldLabel"))
-	_e_mode = UI.option([
-		"Everything",
-		"Moving subjects (remove a still background)",
-		"Everything except a colour (green screen / colour key)",
-		"Remove light areas (white paper, sky)",
-		"Remove dark areas (black backgrounds)",
-		"A subject I pick (tracked through the clip)",
-	])
+	var keep_labels: Array = []
+	for k in KEEP:
+		keep_labels.append(str(k[0]))
+	_e_mode = UI.option(keep_labels)
 	_e_mode.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_e_mode.item_selected.connect(func(_i: int) -> void:
+		_auto_key = -999
 		_update_elements_ui()
 		if _matte_settings()["mode"] == "background" and _preview_source != null:
 			_plate_sources.clear()
@@ -791,7 +812,7 @@ func _build_subject_ui(parent: Control) -> void:
 	_subject_box_ui = UI.vbox(6)
 	_subject_box_ui.visible = false
 	parent.add_child(_subject_box_ui)
-	var steps := UI.label("1  Pause on a frame where the subject is clear and drag a box around it on the preview.\n2  Optional: paint + on parts of the subject and − on background it should never keep.\n3  Press Track subject, then scrub to check. If the box slips, drag a new box on that frame and track again.", "Small")
+	var steps := UI.label("1  Pause on a frame where the subject (or the object to remove) is clear and drag a box around it on the preview.\n2  Optional: paint + on parts of the subject and − on background it should never keep.\n3  Press Track subject, then scrub to check. If the box slips, drag a new box on that frame and track again.", "Small")
 	steps.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_subject_box_ui.add_child(steps)
 	var row := UI.hbox(6)
@@ -832,7 +853,7 @@ func _set_subject_tool(tool: String) -> void:
 
 
 func _subject_mode() -> bool:
-	return _e_mode != null and _e_feather != null and _matte_settings()["mode"] == "subject"
+	return _e_mode != null and _e_feather != null and (_matte_settings()["mode"] == "subject" or _matte_settings()["mode"] == "object")
 
 
 ## Updates the subject overlay, the key markers and the status line.
@@ -961,9 +982,13 @@ func _update_elements_ui() -> void:
 	_e_key_row.visible = mode == "colour"
 	(_e_spill.get_parent() as Control).visible = mode == "colour"
 	_e_crop_box.visible = _e_crop.button_pressed
-	_subject_box_ui.visible = mode == "subject"
-	(_e_edge.get_parent() as Control).visible = mode == "subject"
+	_subject_box_ui.visible = mode == "subject" or mode == "object"
+	(_e_edge.get_parent() as Control).visible = mode == "subject" or mode == "object" or mode == "auto"
 	match mode:
+		"auto":
+			_e_hint.text = "No picking needed: colours along the edges of the frame are treated as background and the main subject in the middle is kept. Works best when the subject stands out from the background. Raise Sensitivity to keep more, lower it to remove more."
+		"object":
+			_e_hint.text = "Drag a box around the thing to remove (and paint + on it, − on what must stay), then Track. The object is cut out of every frame, leaving it transparent."
 		"subject":
 			_e_hint.text = "Sensitivity sets how much a colour must look like the subject to be kept. Raise Clean up if the edge is noisy."
 		"background":
@@ -982,13 +1007,13 @@ func _update_elements_ui() -> void:
 
 
 func _matte_settings() -> Dictionary:
-	var mode: String = MatteProcessor.MODES[clampi(_e_mode.selected, 0, MatteProcessor.MODES.size() - 1)]
+	var mode: String = str(KEEP[clampi(_e_mode.selected, 0, KEEP.size() - 1)][1])
 	var th := _e_threshold.value / 100.0
 	if mode == "light":
 		th = 1.0 - th * 1.2  # brightness above this is removed
 	elif mode == "dark":
 		th = th * 1.2  # brightness below this is removed
-	if mode == "subject":
+	if mode == "subject" or mode == "object" or mode == "auto":
 		th = clampf(0.26 + _e_threshold.value * 0.02, 0.2, 0.9)
 	var l := _e_left.value / 100.0
 	var t := _e_top.value / 100.0

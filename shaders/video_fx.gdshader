@@ -252,6 +252,16 @@ void fragment() {
 	} else if (fx == 24) {
 		// Flash.
 		c = mix(base, tint.rgb, amount);
+	} else if (fx == 26) {
+		// Line boil: everything wobbles slightly, with a new wobble every few
+		// frames, like each frame was traced again by hand. Held drawings
+		// stop looking frozen.
+		float hold = floor(mix(4.0, 1.0, param) + 0.5);   // frames between new wobbles
+		float k = floor(frame / hold);
+		vec2 q = uv * vec2(res.x / res.y, 1.0) * 9.0;
+		vec2 w = vec2(vnoise(q + vec2(k * 7.31, 0.0)), vnoise(q + vec2(3.7, k * 5.17))) - 0.5;
+		w += (vec2(vnoise(q * 2.3 + k * 1.9), vnoise(q * 2.3 + 11.0 + k * 2.3)) - 0.5) * 0.5;
+		c = src(uv + w * px * 3.2 * ps * amount * 2.0);
 	} else if (fx == 25) {
 		// Cinema bars.
 		float bar = amount * 0.13;

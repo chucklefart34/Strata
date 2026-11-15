@@ -24,6 +24,10 @@ var clips: Array[ClipData] = []
 var characters: Array[CharacterData] = []
 ## Episodes of the series: ordered references to scenes plus titles and soundtrack.
 var episodes: Array[EpisodeData] = []
+## Reusable drawings (mouth shapes, blinks, hands, props…): [{id, name, category}]
+## with the pictures in library_cels (id -> CelData, saved under library/).
+var library: Array = []
+var library_cels: Dictionary = {}
 
 
 func to_dict() -> Dictionary:
@@ -54,6 +58,7 @@ func to_dict() -> Dictionary:
 		"clips": clip_list,
 		"characters": char_list,
 		"episodes": ep_list,
+		"library": library.duplicate(true),
 	}
 
 
@@ -78,9 +83,35 @@ static func from_dict(d: Dictionary, p_root: String) -> ProjectData:
 		p.episodes.append(EpisodeData.from_dict(epd))
 	for chd in d.get("characters", []):
 		p.characters.append(CharacterData.from_dict(chd, p_root))
+	for item in d.get("library", []):
+		var it: Dictionary = item
+		var id := str(it.get("id", ""))
+		if id == "":
+			continue
+		var cel := CelData.new(id)
+		cel.file_path = p_root.path_join("library").path_join(id + ".png")
+		p.library_cels[id] = cel
+		p.library.append({"id": id, "name": str(it.get("name", "Drawing")), "category": str(it.get("category", "Drawings"))})
 	if p.scenes.is_empty():
 		p.scenes.append(SceneData.create_default("Scene 1"))
 	return p
+
+
+func library_item(id: String) -> Dictionary:
+	for item in library:
+		var it: Dictionary = item
+		if str(it["id"]) == id:
+			return it
+	return {}
+
+
+## First library drawing with this name in this category, or {}.
+func library_find(category: String, item_name: String) -> Dictionary:
+	for item in library:
+		var it: Dictionary = item
+		if str(it["category"]) == category and str(it["name"]) == item_name:
+			return it
+	return {}
 
 
 func find_character(char_id: String) -> CharacterData:
