@@ -1709,6 +1709,77 @@ func set_entry_field(ep: EpisodeData, index: int, field: String, value: Variant)
 	_entries_action("Edit %s (%s)" % [field.replace("_", " "), str(cur.get("id", ""))], ep, after, true)
 
 
+# ---------------------------------------------------------------- episode effects
+
+func _set_effects(ep: EpisodeData, arr: Array) -> void:
+	ep.effects = arr.duplicate(true)
+	App.notify("episodes")
+
+
+func _effects_action(label: String, ep: EpisodeData, after: Array, merge: bool = false) -> void:
+	ur.create_action(label, UndoRedo.MERGE_ENDS if merge else UndoRedo.MERGE_DISABLE)
+	ur.add_do_method(_set_effects.bind(ep, after))
+	ur.add_undo_method(_set_effects.bind(ep, ep.effects.duplicate(true)))
+	ur.commit_action()
+
+
+func set_effects(ep: EpisodeData, after: Array, label: String) -> void:
+	_effects_action(label, ep, after)
+
+
+func add_effect(ep: EpisodeData, fx: Dictionary) -> void:
+	var after := ep.effects.duplicate(true)
+	after.append(fx)
+	_effects_action("Add effect: %s" % VideoFx.label(str(fx.get("type", ""))), ep, after)
+
+
+func set_effect_field(ep: EpisodeData, id: String, field: String, value: Variant) -> void:
+	var after := ep.effects.duplicate(true)
+	var changed := false
+	for item in after:
+		var e: Dictionary = item
+		var old: Variant = e.get(field)
+		if str(e.get("id", "")) == id and not (typeof(old) == typeof(value) and old == value):
+			e[field] = value
+			changed = true
+	if changed:
+		_effects_action("Edit effect %s (%s)" % [field.replace("_", " "), id], ep, after, true)
+
+
+func delete_effect(ep: EpisodeData, id: String) -> void:
+	var after: Array = []
+	for item in ep.effects:
+		var e: Dictionary = item
+		if str(e.get("id", "")) != id:
+			after.append(e.duplicate(true))
+	_effects_action("Delete effect", ep, after)
+
+
+func duplicate_effect(ep: EpisodeData, id: String) -> String:
+	var after := ep.effects.duplicate(true)
+	for item in ep.effects:
+		var e: Dictionary = item
+		if str(e.get("id", "")) == id:
+			var copy := e.duplicate(true)
+			copy["id"] = Ids.make()
+			copy["start"] = int(e["start"]) + int(e["length"])
+			after.append(copy)
+			_effects_action("Duplicate effect", ep, after)
+			return str(copy["id"])
+	return ""
+
+
+## Records a timeline drag that already changed the clips live.
+func commit_effects(ep: EpisodeData, before: Array, label: String) -> void:
+	if before == ep.effects:
+		return
+	ur.create_action(label)
+	ur.add_do_method(_set_effects.bind(ep, ep.effects.duplicate(true)))
+	ur.add_undo_method(_set_effects.bind(ep, before.duplicate(true)))
+	ur.commit_action(false)
+	App.notify("episodes")
+
+
 ## Copies an audio file into the project's audio folder. Returns {rel, length, name} or {error}.
 func _bring_audio(path: String) -> Dictionary:
 	if not Audio.is_audio_file(path):

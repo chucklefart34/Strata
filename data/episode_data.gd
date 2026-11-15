@@ -25,6 +25,8 @@ var description: String = ""
 var status: String = "Planning"
 var entries: Array = []  # Array of Dictionaries (see above)
 var audio_tracks: Array[AudioTrackData] = []  # soundtrack in episode time
+## Effect clips on the effects track, in episode frames (see VideoFx).
+var effects: Array = []
 
 
 func _init(p_title: String = "Episode", p_number: int = 1) -> void:
@@ -148,6 +150,7 @@ func to_dict() -> Dictionary:
 	return {
 		"id": id, "title": title, "number": number, "description": description,
 		"status": status, "entries": entries.duplicate(true), "audio_tracks": tl,
+		"effects": effects.duplicate(true),
 	}
 
 
@@ -166,6 +169,14 @@ static func from_dict(d: Dictionary) -> EpisodeData:
 		ep.entries.append(copy)
 	for td in d.get("audio_tracks", []):
 		ep.audio_tracks.append(AudioTrackData.from_dict(td))
+	var fxs: Array = d.get("effects", [])
+	for item in fxs:
+		var fx: Dictionary = item
+		var copy := fx.duplicate(true)
+		for k in ["start", "length", "fade_in", "fade_out"]:
+			copy[k] = int(copy.get(k, 0))
+		copy["length"] = maxi(1, int(copy["length"]))
+		ep.effects.append(copy)
 	return ep
 
 
@@ -176,4 +187,7 @@ func clone_deep() -> EpisodeData:
 	for e in ep.entries:
 		var ed: Dictionary = e
 		ed["id"] = Ids.make()
+	for e in ep.effects:
+		var fd: Dictionary = e
+		fd["id"] = Ids.make()
 	return ep

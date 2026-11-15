@@ -7,6 +7,7 @@ extends Control
 
 signal entry_selected(index: int)
 signal frame_requested(frame: int)
+signal effect_selected(id: String)
 
 var episode: EpisodeData = null
 var selected: int = -1
@@ -21,6 +22,11 @@ var _drag_index: int = -1
 var _drag_x: float = 0.0
 var _drag_clip: AudioClipData = null
 var _before: Dictionary = {}
+var selected_fx: String = ""
+var _drag_fx: Dictionary = {}
+var _fx_before: Array = []
+var _fx_start0: int = 0
+var _fx_len0: int = 0
 
 
 func _ready() -> void:
@@ -54,8 +60,32 @@ func _shot_h() -> float:
 	return UI.px(84)
 
 
+## Effects track sits between the shots and the soundtrack.
+func _fx_y() -> float:
+	return _ruler_h() + _shot_h() + UI.px(2)
+
+
+func _fx_row_h() -> float:
+	return UI.px(22)
+
+
+func _fx_rows() -> int:
+	if episode == null or episode.effects.is_empty():
+		return 1
+	var mx := 0
+	var ln := VideoFx.lanes(episode.effects)
+	for k in ln.keys():
+		mx = maxi(mx, int(ln[k]))
+	return mx + 1
+
+
+func _fx_rect(e: Dictionary, row: int) -> Rect2:
+	var y := _fx_y() + row * (_fx_row_h() + UI.px(3))
+	return Rect2(_x(int(e.get("start", 0))), y, maxf(UI.px(6), int(e.get("length", 1)) * frame_w), _fx_row_h())
+
+
 func _music_y() -> float:
-	return _ruler_h() + _shot_h() + UI.px(10)
+	return _fx_y() + _fx_rows() * (_fx_row_h() + UI.px(3)) + UI.px(8)
 
 
 func _x(f: float) -> float:
@@ -146,6 +176,37 @@ func _draw() -> void:
 			draw_rect(r, Palette.ACCENT, false, 2.0)
 		else:
 			draw_rect(r, Color(1, 1, 1, 0.1), false, 1.0)
+	# effects track
+	var fy := _fx_y()
+	var rows := _fx_rows()
+	draw_rect(Rect2(0, fy - UI.px(1), size.x, rows * (_fx_row_h() + UI.px(3)) + UI.px(2)), Color(0, 0, 0, 0.12))
+	if episode.effects.is_empty():
+		draw_string(font, Vector2(UI.px(10), fy + UI.px(15)), "Effects: add VHS, glitch, datamosh and more with “+ Effect” — they go here, at the playhead", HORIZONTAL_ALIGNMENT_LEFT, -1, int(UI.px(11)), Palette.DIM)
+	var lanes := VideoFx.lanes(episode.effects)
+	for item in episode.effects:
+		var fx: Dictionary = item
+		var id := str(fx.get("id", ""))
+		var r := _fx_rect(fx, int(lanes.get(id, 0)))
+		if r.end.x < 0 or r.position.x > size.x:
+			continue
+		var inf := VideoFx.info(str(fx.get("type", "")))
+		var col := VideoFx.category_color(str(inf[2]))
+		draw_rect(r, Color(col, 0.55))
+		# fade ramps
+		var fi := int(fx.get("fade_in", 0)) * frame_w
+		var fo := int(fx.get("fade_out", 0)) * frame_w
+		if fi > 1.0:
+			draw_colored_polygon(PackedVector2Array([r.position, r.position + Vector2(fi, 0), Vector2(r.position.x, r.end.y)]), Color(0, 0, 0, 0.35))
+		if fo > 1.0:
+			draw_colored_polygon(PackedVector2Array([Vector2(r.end.x, r.position.y), Vector2(r.end.x, r.end.y), Vector2(r.end.x - fo, r.position.y)]), Color(0, 0, 0, 0.35))
+		draw_string(font, r.position + Vector2(UI.px(5), UI.px(15)), "✦ " + str(inf[1]), HORIZONTAL_ALIGNMENT_LEFT, maxf(0.0, r.size.x - UI.px(8)), int(UI.px(11)), Palette.TEXT)
+		if id == selected_fx:
+			draw_rect(r, Palette.ACCENT, false, 2.0)
+			# trim handles
+			draw_rect(Rect2(r.position.x, r.position.y, UI.px(4), r.size.y), Palette.ACCENT)
+			draw_rect(Rect2(r.end.x - UI.px(4), r.position.y, UI.px(4), r.size.y), Palette.ACCENT)
+		else:
+			draw_rect(r, Color(col, 0.9), false, 1.0)
 	# soundtrack row
 	var my := _music_y()
 	draw_rect(Rect2(0, my, size.x, size.y - my), Color(0, 0, 0, 0.18))
@@ -220,6 +281,19 @@ func _gui_input(event: InputEvent) -> void:
 			queue_redraw()
 		elif _drag == "shot":
 			queue_redraw()
+		elif _drag.begins_with("fx_") and not _drag_fx.is_empty():
+			var df := roundi((mm.position.x - _drag_x) / frame_w)
+			match _drag:
+				"fx_move":
+					_drag_fx["start"] = maxi(0, _fx_start0 + df)
+				"fx_left":
+					var ns := clampi(_fx_start0 + df, 0, _fx_start0 + _fx_len0 - 1)
+					_drag_fx["start"] = ns
+					_drag_fx["length"] = _fx_len0 - (ns - _fx_start0)
+				"fx_right":
+					_drag_fx["length"] = maxi(1, _fx_len0 + df)
+			queue_redraw()
+			frame_requested.emit(int(_drag_fx["start"]) if _drag != "fx_right" else int(_drag_fx["start"]) + int(_drag_fx["length"]) - 1)
 
 
 func _press(pos: Vector2) -> void:
@@ -233,6 +307,7 @@ func _press(pos: Vector2) -> void:
 			var s: Dictionary = _sched[i]
 			if f >= int(s["start"]) and f < int(s["start"]) + int(s["length"]):
 				selected = int(s["index"])
+				selected_fx = ""
 				entry_selected.emit(selected)
 				_drag = "shot"
 				_drag_index = selected
@@ -240,6 +315,28 @@ func _press(pos: Vector2) -> void:
 				queue_redraw()
 				return
 		return
+	# effect clips (topmost row first)
+	var lanes := VideoFx.lanes(episode.effects)
+	for i in range(episode.effects.size() - 1, -1, -1):
+		var fx: Dictionary = episode.effects[i]
+		var r := _fx_rect(fx, int(lanes.get(str(fx.get("id", "")), 0)))
+		if r.grow(UI.px(3)).has_point(pos):
+			selected_fx = str(fx.get("id", ""))
+			effect_selected.emit(selected_fx)
+			_drag_fx = fx
+			_fx_before = episode.effects.duplicate(true)
+			_fx_start0 = int(fx.get("start", 0))
+			_fx_len0 = int(fx.get("length", 1))
+			_drag_x = pos.x
+			var edge := UI.px(7)
+			if pos.x - r.position.x < edge:
+				_drag = "fx_left"
+			elif r.end.x - pos.x < edge:
+				_drag = "fx_right"
+			else:
+				_drag = "fx_move"
+			queue_redraw()
+			return
 	# soundtrack clips
 	var my := _music_y()
 	var row_h := UI.px(30)
@@ -268,6 +365,10 @@ func _release(pos: Vector2) -> void:
 			entry_selected.emit(selected)
 	elif _drag == "music" and _drag_clip != null:
 		Ops.commit_clip_edit(_drag_clip, _before)
+	elif _drag.begins_with("fx_") and not _drag_fx.is_empty():
+		var label := "Move effect" if _drag == "fx_move" else "Trim effect"
+		_drag_fx = {}
+		Ops.commit_effects(episode, _fx_before, label)
 	_drag = ""
 	_drag_index = -1
 	_drag_clip = null

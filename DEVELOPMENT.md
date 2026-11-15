@@ -66,6 +66,27 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — episode video effects
+
+### Completed
+- **Effects track** in the episode strip, between the shots and the soundtrack.
+  - **+ Effect** adds a clip at the playhead, picked from a categorised menu.
+  - Drag a clip to move it and drag its ends to trim it. Overlapping clips stack into rows.
+  - Fade ramps are drawn on the clips. Moves and trims are undoable (`Ops.add_effect / set_effect_field / delete_effect / duplicate_effect / commit_effects / set_effects`).
+- **Effect panel:** type, Intensity, the effect's own setting (Tape wear, Melt, Block size, Direction…) and colour where relevant. Also start, length, fade in/out, Start at playhead, Fit to shot, Duplicate and Delete.
+- **26 effects** (`episode/video_fx.gd`, `shaders/video_fx.gdshader`):
+  - Retro: VHS tape, Old film, CRT TV, Film grain.
+  - Glitch: Glitch, **Datamosh**, **Gross / crunchy**, Deep fried, RGB split.
+  - Motion: Echo trails, Camera shake, Zoom punch.
+  - Distort: Wavy, Pixelate, Blur, Mirror, Fisheye.
+  - Color: Black & white, Sepia, Invert, Posterize, Color tint, Punchy colors, Vignette, Flash.
+  - Frame: Cinema bars.
+- **How it renders** (`episode/fx_processor.gd`): each active effect is one full-screen pass in a viewport chain. Output viewports ping-pong every frame and the pre-effect picture is kept too, so each frame can read the previous one.
+  - **Datamosh** estimates block motion between this frame and the last, then pushes *last frame's result* along that motion instead of replacing it. Old pictures melt into new movement, and a cut turns the old shot into the new one's motion. Intensity sets how little refreshes; random "I-frame" blocks snap back.
+  - Randomness is driven by frame number and effect id, so exports are repeatable.
+- Preview and export use the same processor, and episode export applies the effects at full resolution.
+- **CI:** a Linux "Launch check" job imports and runs the project headless before the iOS build, and fails on script or parse errors.
+
 ## Update — mobile UI fits the screen
 
 - **Fitting the screen:** on iPad and iPhone the interface is now scaled so a 1440 × 840 design area fits the screen's safe area (landscape), instead of being sized from pixel density (×2.2 before). For example, an 11-inch iPad goes from about 2.2× to about 1.7× and everything fits.

@@ -42,6 +42,10 @@ var _render_dialog: FileDialog
 var _music_dialog: FileDialog
 var _add_scene_menu: MenuButton
 var _syncing: bool = false
+var _fx: FxProcessor
+var _fx_menu: MenuButton
+var _selected_fx: String = ""
+var _props_hold: int = 0  # > 0 while a slider in the side panel is being dragged
 
 
 func _ready() -> void:
@@ -83,6 +87,12 @@ func _ready() -> void:
 		if episode != null:
 			_music_dialog.popup_centered_ratio(0.6))
 	bar.add_child(add_music)
+	_fx_menu = MenuButton.new()
+	_fx_menu.text = "+ Effect"
+	_fx_menu.flat = false
+	_fx_menu.tooltip_text = "Add a video effect at the playhead (VHS, glitch, datamosh, film, colour…)"
+	_build_fx_menu()
+	bar.add_child(_fx_menu)
 
 	var stack := Control.new()
 	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -143,9 +153,12 @@ func _ready() -> void:
 	strip_card.theme_type_variation = "Section"
 	center.add_child(strip_card)
 	_strip = EpisodeStrip.new()
-	_strip.custom_minimum_size.y = UI.px(190)
+	_strip.custom_minimum_size.y = UI.px(236)
 	strip_card.add_child(_strip)
-	_strip.entry_selected.connect(_select)
+	_strip.entry_selected.connect(func(i: int) -> void:
+		_selected_fx = ""
+		_select(i))
+	_strip.effect_selected.connect(_select_fx)
 	_strip.frame_requested.connect(func(f: int) -> void:
 		_stop()
 		_seek(f))
@@ -160,6 +173,8 @@ func _ready() -> void:
 
 	_comp = EpisodeCompositor.new()
 	add_child(_comp)
+	_fx = FxProcessor.new()
+	add_child(_fx)
 	_feed = SceneFeed.new()
 	add_child(_feed)
 	_comp.render_target_update_mode = SubViewport.UPDATE_DISABLED
@@ -330,7 +345,7 @@ func _refresh() -> void:
 	_rebuild_storyboard()
 	_rebuild_shotlist()
 	var focus := get_viewport().gui_get_focus_owner()
-	if focus == null or not _props.is_ancestor_of(focus):
+	if _props_hold <= 0 and (focus == null or not _props.is_ancestor_of(focus)):
 		_rebuild_props()
 	_update_time()
 	if is_visible_in_tree() and not _playing:
@@ -539,6 +554,9 @@ func _rebuild_props() -> void:
 		c.queue_free()
 	if episode == null:
 		return
+	if _selected_fx != "" and not _find_fx(_selected_fx).is_empty():
+		_build_fx_props()
+		return
 	if selected < 0 or selected >= episode.entries.size():
 		var sec := UI.section(_props, "Shot")
 		var l := UI.label("Select a shot in the strip, storyboard or shot list.", "Small")
@@ -711,6 +729,177 @@ func _option_field(grid: Control, idx: int, title: String, field: String, values
 	grid.add_child(o)
 
 
+# ================================================================ effects
+
+func _build_fx_menu() -> void:
+	var pm := _fx_menu.get_popup()
+	pm.clear()
+	for cat in VideoFx.categories():
+		pm.add_separator(str(cat))
+		for i in VideoFx.EFFECTS.size():
+			var inf: Array = VideoFx.EFFECTS[i]
+			if inf[2] == cat:
+				pm.add_item(str(inf[1]), i)
+	pm.id_pressed.connect(_on_add_fx)
+
+
+func _on_add_fx(i: int) -> void:
+	if episode == null:
+		App.status("Create an episode first")
+		return
+	var fx := VideoFx.make(str(VideoFx.EFFECTS[i][0]), _frame, App.project.fps)
+	Ops.add_effect(episode, fx)
+	_select_fx(str(fx["id"]))
+	App.status("Added %s at %s — drag it on the effects track to move, drag its ends to trim" % [VideoFx.label(str(fx["type"])), _timecode(_frame)])
+
+
+func _timecode(f: int) -> String:
+	var secs := f / float(App.project.fps)
+	return "%d:%04.1f" % [int(secs) / 60, fmod(secs, 60.0)]
+
+
+func _find_fx(id: String) -> Dictionary:
+	if episode == null:
+		return {}
+	for item in episode.effects:
+		var e: Dictionary = item
+		if str(e.get("id", "")) == id:
+			return e
+	return {}
+
+
+func _select_fx(id: String) -> void:
+	_selected_fx = id
+	_strip.selected_fx = id
+	if id != "":
+		selected = -1
+		_strip.selected = -1
+	_strip.queue_redraw()
+	_rebuild_props()
+	_render_preview()
+
+
+func _fx_set(field: String, value: Variant) -> void:
+	if episode != null and _selected_fx != "":
+		Ops.set_effect_field(episode, _selected_fx, field, value)
+
+
+## A slider that doesn't rebuild the panel under the mouse while dragging.
+func _fx_slider(parent: Control, title: String, min_v: float, max_v: float, step: float, value: float, field: String, scale_k: float, fmt: String) -> void:
+	var sl := UI.slider(parent, title, min_v, max_v, step, value * scale_k, _on_fx_slider.bind(field, scale_k), fmt)
+	sl.drag_started.connect(func() -> void: _props_hold += 1)
+	sl.drag_ended.connect(func(_c: bool) -> void:
+		_props_hold = maxi(0, _props_hold - 1)
+		_rebuild_props.call_deferred())
+
+
+func _on_fx_slider(v: float, field: String, scale_k: float) -> void:
+	_fx_set(field, v / scale_k)
+
+
+func _build_fx_props() -> void:
+	var e := _find_fx(_selected_fx)
+	var type := str(e.get("type", ""))
+	var inf := VideoFx.info(type)
+	var fps: int = App.project.fps
+	var sec := UI.section(_props, "Effect")
+	var head := UI.label("✦ " + str(inf[1]), "Heading")
+	head.modulate = VideoFx.category_color(str(inf[2])).lightened(0.3)
+	sec.add_child(head)
+	var tr := UI.hbox(6)
+	sec.add_child(tr)
+	tr.add_child(UI.label("Type", "FieldLabel"))
+	var names: Array = []
+	for x in VideoFx.EFFECTS:
+		names.append("%s — %s" % [str(x[2]), str(x[1])])
+	var to := UI.option(names, VideoFx.index_of(type))
+	to.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	to.item_selected.connect(func(i: int) -> void: _fx_set("type", str(VideoFx.EFFECTS[i][0])))
+	tr.add_child(to)
+	_fx_slider(sec, "Intensity", 0, 100, 1, float(e.get("amount", 1.0)), "amount", 100.0, "%d%%")
+	if str(inf[3]) != "":
+		var plabel := str(inf[3])
+		if type == "mirror":
+			plabel = "Mode (left-right · top-bottom · four-way)"
+		_fx_slider(sec, plabel, 0, 100, 1, float(e.get("param", 0.5)), "param", 100.0, "%d%%")
+	if bool(inf[4]):
+		var cr := UI.hbox(6)
+		sec.add_child(cr)
+		cr.add_child(UI.label("Colour", "FieldLabel"))
+		var cp := ColorPickerButton.new()
+		cp.color = Color.from_string(str(e.get("color", "ffffffff")), Color.WHITE)
+		cp.edit_alpha = false
+		cp.custom_minimum_size = UI.size2(60, 28)
+		cp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cp.popup_closed.connect(func() -> void: _fx_set("color", cp.color.to_html(true)))
+		cr.add_child(cp)
+
+	var tsec := UI.section(_props, "Timing")
+	var g := GridContainer.new()
+	g.columns = 2
+	g.add_theme_constant_override("h_separation", int(UI.px(10)))
+	g.add_theme_constant_override("v_separation", int(UI.px(8)))
+	tsec.add_child(g)
+	for row in [["Starts at", "start", 0, 1000000], ["Length", "length", 1, 1000000], ["Fade in", "fade_in", 0, 10000], ["Fade out", "fade_out", 0, 10000]]:
+		g.add_child(UI.label(str(row[0]), "FieldLabel"))
+		var sp := UI.spin(float(row[2]), float(row[3]), 1, int(e.get(str(row[1]), 0)), " fr")
+		sp.tooltip_text = "%.2f s" % (int(e.get(str(row[1]), 0)) / float(fps))
+		sp.value_changed.connect(_on_fx_spin.bind(str(row[1])))
+		g.add_child(sp)
+	var trow := UI.hbox(6)
+	tsec.add_child(trow)
+	var here := UI.button("Start at playhead", "", "Move the effect so it starts at the playhead", "FlatButton")
+	here.pressed.connect(func() -> void: _fx_set("start", _frame))
+	trow.add_child(here)
+	var fit := UI.button("Fit to shot", "fit", "Make the effect cover the whole shot under the playhead", "FlatButton")
+	fit.pressed.connect(_fit_fx_to_shot)
+	trow.add_child(fit)
+
+	var arow := UI.hbox(6)
+	_props.add_child(arow)
+	var dup := UI.button("Duplicate", "copy", "Copy this effect right after itself", "Button")
+	dup.pressed.connect(func() -> void:
+		var nid := Ops.duplicate_effect(episode, _selected_fx)
+		if nid != "":
+			_select_fx(nid))
+	arow.add_child(dup)
+	var del := UI.button("Delete", "trash", "Remove this effect", "FlatButton")
+	del.pressed.connect(func() -> void:
+		Ops.delete_effect(episode, _selected_fx)
+		_select_fx(""))
+	arow.add_child(del)
+	var done := UI.button("Done", "", "Back to the shot", "FlatButton")
+	done.pressed.connect(func() -> void: _select_fx(""))
+	arow.add_child(done)
+	var tip := UI.label("Effects stack like adjustment layers: where clips overlap, the lower row is applied first. Datamosh and Echo use the previous frame, so press Play to see them move (scrubbing shows a still).", "Small")
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_props.add_child(tip)
+
+
+func _on_fx_spin(v: float, field: String) -> void:
+	_fx_set(field, int(v))
+
+
+func _fit_fx_to_shot() -> void:
+	if episode == null:
+		return
+	var sched := episode.schedule(App.project)
+	for item in sched:
+		var s: Dictionary = item
+		var st := int(s["start"])
+		if _frame >= st and _frame < st + int(s["length"]):
+			var e := _find_fx(_selected_fx)
+			var after := episode.effects.duplicate(true)
+			for x in after:
+				var d: Dictionary = x
+				if str(d.get("id", "")) == _selected_fx:
+					d["start"] = st
+					d["length"] = int(s["length"])
+			if not e.is_empty():
+				Ops.set_effects(episode, after, "Fit effect to shot")
+			return
+
+
 # ================================================================ preview & playback
 
 func _ensure_preview_setup() -> void:
@@ -722,6 +911,7 @@ func _ensure_preview_setup() -> void:
 	var h := int(p.height * k)
 	if _comp.size != Vector2i(w, h):
 		_comp.setup(w, h)
+		_fx.setup(w, h)
 	if _feed.depth == null or _feed.size != Vector2i(w, h):
 		_feed.setup(depth_workspace.depth, w, h)
 		_feed.render_target_update_mode = SubViewport.UPDATE_ALWAYS if is_visible_in_tree() else SubViewport.UPDATE_DISABLED
@@ -801,6 +991,7 @@ func _render_preview() -> void:
 		else:
 			_comp.set_title(_comp.slot_b, be, int(bd["local"]), App.project.fps)
 	_comp.compose(st, ov_text, ov_style, ov_alpha)
+	_preview_rect.texture = _fx.process(_comp.get_texture(), VideoFx.active_at(episode.effects, _frame), _frame, App.project.fps)
 
 
 func _toggle_play() -> void:

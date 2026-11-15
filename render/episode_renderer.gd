@@ -7,6 +7,7 @@ extends Node
 signal progress(done: int, total: int, message: String)
 signal finished(ok: bool, message: String, output_dir: String)
 
+var _fx_node: FxProcessor = null
 var busy: bool = false
 var _cancel: bool = false
 
@@ -66,8 +67,13 @@ func render(ep: EpisodeData, depth: DepthView, out_dir: String, make_mp4: bool, 
 	var comp := EpisodeCompositor.new()
 	add_child(comp)
 	comp.setup(p.width, p.height)
+	var fx := FxProcessor.new()
+	add_child(fx)
+	fx.setup(p.width, p.height)
+	_fx_node = fx
 	var tex_a := ImageTexture.new()
 	var tex_b := ImageTexture.new()
+	var tex_fx := ImageTexture.new()
 	var base := ("ep%02d_%s" % [ep.number, ep.title]).validate_filename().replace(" ", "_")
 
 	for f in total:
@@ -107,6 +113,15 @@ func render(ep: EpisodeData, depth: DepthView, out_dir: String, make_mp4: bool, 
 		comp.compose(st, ov_text, ov_style, ov_alpha)
 		await RenderingServer.frame_post_draw
 		var out := comp.get_texture().get_image()
+		var active := VideoFx.active_at(ep.effects, f)
+		if not active.is_empty():
+			# The effects read the finished composite (and last frame's result).
+			tex_fx.set_image(out)
+			var fx_tex := fx.process(tex_fx, active, f, p.fps)
+			await RenderingServer.frame_post_draw
+			out = fx_tex.get_image()
+		else:
+			fx.process(null, active, f, p.fps)
 		var path := out_dir.path_join("%s_%06d.png" % [base, f + 1])
 		if out.save_png(path) != OK:
 			_finish(feed, comp, was_scene, was_frame, was_low)
@@ -192,6 +207,9 @@ func _encode_export(frames_dir: String, base: String, total: int, wav: String, o
 func _finish(feed: SceneFeed, comp: EpisodeCompositor, scene_index: int, frame: int, low: bool) -> void:
 	feed.queue_free()
 	comp.queue_free()
+	if _fx_node != null:
+		_fx_node.queue_free()
+		_fx_node = null
 	OS.low_processor_usage_mode = low
 	App.set_scene(scene_index)
 	App.set_frame(frame)
