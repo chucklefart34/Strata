@@ -66,6 +66,24 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — Draw from a prompt (AI)
+
+- **Panel:** `ui/panels/ai_draw_panel.gd`, in the Draw and Animate sidebars. **Service:** `drawing/ai_draw.gd`.
+- **Writing a prompt:**
+  - Type a prompt; more words → a higher quality / step setting (`AiDraw.detail_level`: under 12 words, 12–39, 40+).
+  - Style: line art (white → see-through, darkness → opacity), coloured, or coloured with the white background around the subject removed (edge flood fill).
+- **Your drawings guide it:**
+  - The drawing already on this frame is the sketch (pose, layout, framing), with a "Follow my sketch" amount.
+  - The nearest keyframes before and after on the layer are sent as references, so the character and style stay consistent.
+  - **Fill in-betweens** draws every Nth empty frame between keyframes from the two keyframes around it, at the right fraction. OpenAI gets both keyframes; Stability and local get a cross-fade as the guide.
+- **Services:**
+  - OpenAI Images: `/v1/images/generations`, or `/edits` with `image[]` when there are guide images.
+  - Stability: `control/sketch`, or `generate/core|ultra`.
+  - Automatic1111 / Forge `--api`: `txt2img` / `img2img`.
+- **Keys:** stored in `user://settings.cfg` (`ai_*`), never in projects.
+- **Images:** guide images are flattened on white and letterboxed into the model's size; the same area is cut back out of the result.
+- **Undo:** results go on the current layer (or a new layer) as one undo step (`Ops.add_drawings`).
+
 ## Update — hand-drawn tools, 2D camera, library and lip sync, better roto and background removal
 
 ### Completed

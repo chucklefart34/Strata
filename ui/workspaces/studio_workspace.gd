@@ -100,12 +100,14 @@ func _ready() -> void:
 		side.add_child(PosePanel.new())
 		side.add_child(LayerPanel.new())
 		side.add_child(LibraryPanel.new(true))
+		side.add_child(AiDrawPanel.new())
 		side.add_child(CameraPanel.new())
 		side.add_child(ClipsPanel.new())
 		side.add_child(BrushPanel.new())
 	else:
 		side.add_child(BrushPanel.new())
 		side.add_child(LayerPanel.new())
+		side.add_child(AiDrawPanel.new())
 		side.add_child(LibraryPanel.new(false))
 
 
