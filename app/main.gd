@@ -333,6 +333,8 @@ var _lp_timer: Timer = null
 ## On touch screens, holding a finger still for a moment acts as a
 ## right-click (context menus, colour swatch options).
 func _input(event: InputEvent) -> void:
+	if _arrow_keys(event):
+		return
 	if not Platform.is_mobile():
 		return
 	var st := event as InputEventScreenTouch
@@ -481,6 +483,32 @@ func _notification(what: int) -> void:
 
 
 # ================================================================ shortcuts
+
+## Left / right arrow: jump to the previous / next drawing on the selected
+## layer (Shift: step one frame). Handled before the UI so focused buttons
+## and sliders don't swallow it; text fields keep their arrows.
+func _arrow_keys(event: InputEvent) -> bool:
+	var k := event as InputEventKey
+	if k == null or not k.pressed:
+		return false
+	if k.keycode != KEY_LEFT and k.keycode != KEY_RIGHT:
+		return false
+	if k.ctrl_pressed or k.meta_pressed or k.alt_pressed:
+		return false
+	if not App.has_project() or not (_current == "draw" or _current == "animate"):
+		return false
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return false
+	var d := -1 if k.keycode == KEY_LEFT else 1
+	App.stop()
+	if k.shift_pressed:
+		App.step_frame(d)
+	else:
+		App.step_key(d)
+	get_viewport().set_input_as_handled()
+	return true
+
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var k := event as InputEventKey

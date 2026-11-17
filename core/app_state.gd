@@ -184,6 +184,33 @@ func step_frame(delta: int) -> void:
 	set_frame(f)
 
 
+## Jumps to the previous (-1) or next (+1) drawing on the selected layer.
+## Wraps around when looping is on; otherwise stays put at the ends.
+func step_key(delta: int) -> void:
+	var layer := current_layer()
+	var keys: Array = [] if layer == null or layer.is_character() else layer.sorted_keys()
+	if keys.is_empty():
+		step_frame(delta)
+		return
+	var target := -1
+	if delta > 0:
+		for k in keys:
+			if int(k) > frame:
+				target = int(k)
+				break
+		if target < 0 and loop_playback:
+			target = int(keys[0])
+	else:
+		for i in range(keys.size() - 1, -1, -1):
+			if int(keys[i]) < frame:
+				target = int(keys[i])
+				break
+		if target < 0 and loop_playback:
+			target = int(keys[keys.size() - 1])
+	if target >= 0:
+		set_frame(target)
+
+
 func set_tool(t: String) -> void:
 	if t == tool or not TOOLS.has(t):
 		return

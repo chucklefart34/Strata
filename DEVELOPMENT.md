@@ -66,6 +66,12 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — arrow keys
+
+- In Draw and Animate, **← / →** jump to the previous / next drawing on the selected layer (`App.step_key`). They wrap around when looping is on.
+- **Shift+← / →** step one frame; `,` and `.` still step one frame too.
+- Arrows still work normally inside text fields.
+
 ## Update — Draw from a prompt (AI)
 
 - **Panel:** `ui/panels/ai_draw_panel.gd`, in the Draw and Animate sidebars. **Service:** `drawing/ai_draw.gd`.
