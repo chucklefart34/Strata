@@ -42,6 +42,12 @@ var _kind: String = "2d"
 var _kind_btns: Dictionary = {}
 
 
+var _upd_status: Label
+var _upd_check: Button
+var _upd_install: Button
+var _upd_page: Button
+var _upd_timer_on: bool = false
+
 func _ready() -> void:
 	var scroll := ScrollContainer.new()
 	UI.full_rect(scroll)
@@ -161,7 +167,7 @@ func _ready() -> void:
 		body.custom_minimum_size.x = UI.px(200)
 		box.add_child(body)
 		steps.add_child(box)
-	var keys := UI.label("Shortcuts: B brush · P pencil · E eraser · G fill · I picker · L/U/O shapes · S/A select · V move · H hand · [ ] size · , . step frames · Enter play · N new drawing · D duplicate · M marker · Ctrl+C/V copy/paste · Ctrl+Z undo · Ctrl+S save", "Small")
+	var keys := UI.label("Shortcuts: B brush · P pencil · E eraser · G fill · I picker · L/U/O shapes · S/A select · V move · H hand · [ ] size · , . step frames · ← → previous/next drawing · Enter play · N new drawing · D duplicate · M marker · Ctrl+C/V copy/paste · Ctrl+Z undo · Ctrl+S save", "Small")
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	guide.add_child(keys)
 
@@ -219,6 +225,31 @@ func _ready() -> void:
 	add_child(_ff_dialog)
 	_update_ffmpeg_status()
 
+	# ---------------------------------------------------------- updates
+	var upd := _card(col, "Updates")
+	var ur := UI.hbox(10)
+	upd.add_child(ur)
+	_upd_status = UI.label("", "Small")
+	_upd_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_upd_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ur.add_child(_upd_status)
+	_upd_check = UI.button("Check for updates", "reset", "Ask GitHub whether there's a newer build")
+	_upd_check.pressed.connect(Updater.check)
+	ur.add_child(_upd_check)
+	_upd_install = UI.button("Install update", "save", "Download the new build, save your project, and restart into it", "AccentButton")
+	_upd_install.pressed.connect(Updater.install)
+	ur.add_child(_upd_install)
+	_upd_page = UI.button("Open download page", "folder", "", "FlatButton")
+	_upd_page.pressed.connect(func() -> void: OS.shell_open(Updater.release_page()))
+	ur.add_child(_upd_page)
+	var auto := CheckBox.new()
+	auto.text = "Check for updates when Strata starts"
+	auto.button_pressed = Updater.auto_check()
+	auto.toggled.connect(func(on: bool) -> void: ProjectIO.set_setting("update_auto_check", on))
+	upd.add_child(auto)
+	Updater.state_changed.connect(_update_updates)
+	_update_updates()
+
 	# ---------------------------------------------------------- dialogs
 	_open_dialog = FileDialog.new()
 	_open_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -260,6 +291,37 @@ func _on_ff_located(path: String) -> void:
 	else:
 		show_error("That doesn't look like a working ffmpeg:\n%s\n\n%s" % [path, FFmpeg.help_text()])
 	_update_ffmpeg_status()
+
+
+func _update_updates() -> void:
+	var st := Updater.state
+	var txt := "This is %s." % Updater.current_text()
+	if Updater.message != "":
+		txt += " " + Updater.message
+	if st == Updater.DOWNLOADING:
+		var p := Updater.progress()
+		if p.y > 0:
+			txt += " %d of %d MB" % [p.x / 1048576, p.y / 1048576]
+		if not _upd_timer_on:
+			_upd_timer_on = true
+			_poll_download()
+	_upd_status.text = txt
+	_upd_check.disabled = Updater.busy()
+	_upd_install.visible = st == Updater.AVAILABLE and Updater.can_install()
+	_upd_install.disabled = Updater.busy()
+	_upd_page.visible = st == Updater.AVAILABLE and not Updater.can_install() or st == Updater.FAILED
+
+
+func _poll_download() -> void:
+	while Updater.state == Updater.DOWNLOADING and is_inside_tree():
+		_update_updates_text()
+		await get_tree().create_timer(0.5).timeout
+	_upd_timer_on = false
+
+
+func _update_updates_text() -> void:
+	var p := Updater.progress()
+	_upd_status.text = "Downloading the update… %d of %d MB" % [p.x / 1048576, maxi(p.y, p.x) / 1048576] if p.y > 0 else "Downloading the update… %d MB" % (p.x / 1048576)
 
 
 func _card(parent: Control, title: String) -> VBoxContainer:

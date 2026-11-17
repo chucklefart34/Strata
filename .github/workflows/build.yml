@@ -74,6 +74,12 @@ jobs:
           ls "$TDIR"
           echo "GODOT=$PWD/Godot_v${V}_linux.x86_64" >> "$GITHUB_ENV"
 
+      - name: Stamp the build number
+        run: |
+          printf 'class_name BuildInfo\nconst BUILD := %s\nconst COMMIT := "%s"\nconst DATE := "%s"\n' "${{ github.run_number }}" "${GITHUB_SHA}" "$(date -u +%Y-%m-%d)" > core/build_info.gd
+          printf '{"build": %s, "commit": "%s", "date": "%s"}\n' "${{ github.run_number }}" "${GITHUB_SHA}" "$(date -u +%Y-%m-%d)" > version.json
+          cat core/build_info.gd version.json
+
       - name: Export Strata.exe
         run: |
           set -euo pipefail
@@ -119,7 +125,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete windows-latest --yes --cleanup-tag || true
-          gh release create windows-latest build/Strata-windows.zip \
+          gh release create windows-latest build/Strata-windows.zip version.json \
             --title "Windows build — ${GITHUB_SHA::7}" \
             --notes "Strata for Windows (64-bit), built $(date -u +%Y-%m-%d). Unzip and run Strata.exe; keep the ffmpeg folder next to it." \
             --prerelease --target "$GITHUB_SHA"
@@ -155,6 +161,12 @@ jobs:
           mv templates/* "$TDIR/"
           ls "$TDIR" | grep -i ios
           echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+
+      - name: Stamp the build number
+        run: |
+          printf 'class_name BuildInfo\nconst BUILD := %s\nconst COMMIT := "%s"\nconst DATE := "%s"\n' "${{ github.run_number }}" "${GITHUB_SHA}" "$(date -u +%Y-%m-%d)" > core/build_info.gd
+          printf '{"build": %s, "commit": "%s", "date": "%s"}\n' "${{ github.run_number }}" "${GITHUB_SHA}" "$(date -u +%Y-%m-%d)" > version.json
+          cat core/build_info.gd version.json
 
       - name: Import the project
         run: |
@@ -201,7 +213,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete ios-latest --yes --cleanup-tag || true
-          gh release create ios-latest build/ios/Strata-unsigned.ipa \
+          gh release create ios-latest build/ios/Strata-unsigned.ipa version.json \
             --title "iOS build (unsigned) — ${GITHUB_SHA::7}" \
             --notes "Unsigned build of $(date -u +%Y-%m-%d). Install with Sideloadly or AltStore using your Apple ID (see BUILD_IOS.md)." \
             --prerelease --target "$GITHUB_SHA"

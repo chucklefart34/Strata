@@ -21,6 +21,7 @@ Ops="*res://core/edit_ops.gd"
 ProjectIO="*res://core/project_io.gd"
 Rigs="*res://core/rig_manager.gd"
 Audio="*res://core/audio_engine.gd"
+Updater="*res://core/updater.gd"
 
 [display]
 

@@ -66,6 +66,16 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — check for updates / auto install
+
+- **Build numbers:** CI stamps `core/build_info.gd` (`BuildInfo.BUILD` = workflow run number, `COMMIT`, `DATE`) before exporting. It also publishes `version.json` with the same numbers on the `windows-latest` and `ios-latest` releases. Local copies are build 0 ("development copy").
+- **Checking:** `core/updater.gd` (autoload `Updater`) checks at startup (at most every 6 h, can be turned off) and from **Home › Updates**.
+- **Windows install:**
+  1. Download `Strata-windows.zip` into `user://update`, unpack it with ZIPReader, and save the open project.
+  2. Write `update.cmd`: wait for Strata's PID to exit, `robocopy` the new files over the app folder, start Strata.exe, delete the staging folder. Then quit.
+  - If the app folder isn't writable (e.g. Program Files), it says so and offers the download page.
+- **iPad:** shows that a new build is out and opens the release page (sideloaded apps can't replace themselves).
+
 ## Update — arrow keys
 
 - In Draw and Animate, **← / →** jump to the previous / next drawing on the selected layer (`App.step_key`). They wrap around when looping is on.
