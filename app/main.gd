@@ -485,13 +485,13 @@ func _notification(what: int) -> void:
 # ================================================================ shortcuts
 
 ## Left / right arrow: jump to the previous / next drawing on the selected
-## layer (Shift: step one frame). Handled before the UI so focused buttons
+## layer (Shift: step one frame). Down / up arrow: next / previous frame. Handled before the UI so focused buttons
 ## and sliders don't swallow it; text fields keep their arrows.
 func _arrow_keys(event: InputEvent) -> bool:
 	var k := event as InputEventKey
 	if k == null or not k.pressed:
 		return false
-	if k.keycode != KEY_LEFT and k.keycode != KEY_RIGHT:
+	if not (k.keycode in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]):
 		return false
 	if k.ctrl_pressed or k.meta_pressed or k.alt_pressed:
 		return false
@@ -500,8 +500,13 @@ func _arrow_keys(event: InputEvent) -> bool:
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return false
-	var d := -1 if k.keycode == KEY_LEFT else 1
 	App.stop()
+	if k.keycode == KEY_UP or k.keycode == KEY_DOWN:
+		# like an exposure sheet: down = next frame, up = previous frame
+		App.step_frame(1 if k.keycode == KEY_DOWN else -1)
+		get_viewport().set_input_as_handled()
+		return true
+	var d := -1 if k.keycode == KEY_LEFT else 1
 	if k.shift_pressed:
 		App.step_frame(d)
 	else:

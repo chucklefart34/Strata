@@ -90,6 +90,7 @@ The spec recommends making the first milestone "drawing studio + animation timel
 ## Update — arrow keys
 
 - In Draw and Animate, **← / →** jump to the previous / next drawing on the selected layer (`App.step_key`). They wrap around when looping is on.
+- **↓ / ↑** step to the next / previous frame, exposure-sheet style (including empty and held frames).
 - **Shift+← / →** step one frame; `,` and `.` still step one frame too.
 - Arrows still work normally inside text fields.
 
