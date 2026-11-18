@@ -4,6 +4,9 @@ extends Control
 ## camera row. A block is a drawing key; the bar after it shows how long the
 ## drawing is held. Click to select frame/layer, drag a key to retime it,
 ## double-click an empty cell to create a drawing, drag the ruler to scrub.
+## Ctrl/Cmd-click adds or removes drawings from the selection, Shift-click
+## selects everything between the last clicked drawing and this one (across
+## layers too); dragging any selected drawing moves the whole group.
 ## Only visible frames are drawn, so very long scenes stay fast.
 
 var show_camera_row: bool = false
@@ -17,6 +20,10 @@ var _drag: String = ""
 var _drag_layer: LayerData = null
 var _drag_from: int = -1
 var _drag_to: int = -1
+## Selected drawings: "layer_id:frame" -> [LayerData, frame].
+var _sel: Dictionary = {}
+var _anchor: Array = []  # [LayerData, frame] of the last plain/ctrl click
+var _pending_single: bool = false  # plain click on a selected key: select only it if not dragged
 
 
 func _ready() -> void:
@@ -30,6 +37,10 @@ func _ready() -> void:
 		sig.connect(queue_redraw)
 	Audio.peaks_ready.connect(func(_p: String) -> void: queue_redraw())
 	App.frame_changed.connect(_on_frame_changed)
+	App.timeline_changed.connect(_prune_selection)
+	App.layers_changed.connect(_prune_selection)
+	App.scene_switched.connect(clear_selection)
+	App.project_opened.connect(clear_selection)
 	resized.connect(_clamp_scroll)
 
 
@@ -199,15 +210,34 @@ func _draw() -> void:
 		draw_rect(tag, Palette.ACCENT)
 		draw_string(font, Vector2(tag.position.x, tag.position.y + tag.size.y * 0.5 + fs * 0.33), str(App.frame + 1), HORIZONTAL_ALIGNMENT_CENTER, tag.size.x, int(UI.px(11)), Color("#1a1210"))
 
-	# drag preview for a key being retimed
+	# selected drawings: a bright outline on each
+	if not _sel.is_empty():
+		var rows_sel := _rows()
+		for r in rows_sel.size():
+			var row: Dictionary = rows_sel[r]
+			if row["kind"] != "layer":
+				continue
+			var y := rh + r * row_h - scroll_y
+			for item in _sel.values():
+				if item[0] == row["layer"]:
+					var sx := _frame_x(int(item[1]))
+					if sx + frame_w > hw and sx < size.x:
+						draw_rect(Rect2(sx + 1, y + UI.px(2), frame_w - 2, row_h - UI.px(4)), Color("#ffffff"), false, maxf(1.5, UI.px(2)))
+
+	# drag preview for drawings being retimed (one, or the whole selection)
 	if _drag == "key" and _drag_to != _drag_from:
+		var delta := _drag_to - _drag_from
 		var rows_now := _rows()
 		for r in rows_now.size():
 			var row: Dictionary = rows_now[r]
-			if row["kind"] == "layer" and row["layer"] == _drag_layer:
-				var y := rh + r * row_h - scroll_y
-				var rect := Rect2(_frame_x(_drag_to) + 1, y + 3, frame_w - 2, row_h - 6)
-				draw_rect(rect, Color(1, 1, 1, 0.8), false, 2.0)
+			if row["kind"] != "layer":
+				continue
+			var y := rh + r * row_h - scroll_y
+			for item in _drag_items():
+				if item[0] == row["layer"]:
+					var rect := Rect2(_frame_x(int(item[1]) + delta) + 1, y + 3, frame_w - 2, row_h - 6)
+					draw_rect(rect, Color(1, 1, 1, 0.25))
+					draw_rect(rect, Color(1, 1, 1, 0.8), false, 2.0)
 
 
 func _draw_layer_cels(layer: LayerData, s: SceneData, y: float, row_h: float, first: int, last: int, selected: bool) -> void:
@@ -344,7 +374,7 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				_press(mb.position, mb.double_click)
+				_press(mb.position, mb.double_click, mb.ctrl_pressed or mb.meta_pressed, mb.shift_pressed)
 			else:
 				_release()
 			accept_event()
@@ -360,7 +390,7 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
-func _press(pos: Vector2, double: bool) -> void:
+func _press(pos: Vector2, double: bool, ctrl: bool = false, shift: bool = false) -> void:
 	var s := App.current_scene()
 	if s == null:
 		return
@@ -390,16 +420,42 @@ func _press(pos: Vector2, double: bool) -> void:
 	if pos.x < _header_w():
 		return
 	App.stop()
+	var has_key := layer.cels.has(f)
+	if ctrl and has_key:
+		# add / remove this drawing; no drag unless it's now selected
+		var id := _sel_id(layer, f)
+		if _sel.has(id):
+			_sel.erase(id)
+		else:
+			_sel[id] = [layer, f]
+			_start_key_drag(layer, f)
+		_anchor = [layer, f]
+		App.set_frame(f)
+		queue_redraw()
+		return
+	if shift and not _anchor.is_empty():
+		_select_range(_anchor, layer, f, ctrl)
+		App.set_frame(f)
+		if has_key:
+			_start_key_drag(layer, f)
+		queue_redraw()
+		return
 	App.set_frame(f)
-	if double and not layer.cels.has(f):
+	if double and not has_key:
 		Ops.new_drawing(layer, f)
 		return
-	if layer.cels.has(f):
-		_drag = "key"
-		_drag_layer = layer
-		_drag_from = f
-		_drag_to = f
+	if has_key:
+		if _sel.has(_sel_id(layer, f)) and _sel.size() > 1:
+			_pending_single = true  # drag moves the group; a plain click picks just this one
+		else:
+			_sel = {_sel_id(layer, f): [layer, f]}
+		_anchor = [layer, f]
+		_start_key_drag(layer, f)
+		queue_redraw()
 	else:
+		if not ctrl and not shift:
+			clear_selection()
+			_anchor = []
 		_drag = "scrub"
 
 
@@ -418,10 +474,105 @@ func _motion(pos: Vector2) -> void:
 
 func _release() -> void:
 	if _drag == "key" and _drag_layer != null and _drag_to != _drag_from:
-		Ops.move_key(_drag_layer, _drag_from, _drag_to)
+		var delta := _drag_to - _drag_from
+		var items := _drag_items()
+		if items.size() <= 1:
+			Ops.move_key(_drag_layer, _drag_from, _drag_to)
+			_sel = {_sel_id(_drag_layer, _drag_to): [_drag_layer, _drag_to]}
+		else:
+			var groups := {}
+			for item in items:
+				if not groups.has(item[0]):
+					groups[item[0]] = []
+				var arr: Array = groups[item[0]]
+				arr.append(int(item[1]))
+			if Ops.move_keys(groups, delta):
+				var moved := {}
+				for item in items:
+					moved[_sel_id(item[0], int(item[1]) + delta)] = [item[0], int(item[1]) + delta]
+				_sel = moved
+		if not _anchor.is_empty():
+			_anchor = [_anchor[0], int(_anchor[1]) + delta]
+	elif _drag == "key" and _pending_single and _drag_layer != null:
+		_sel = {_sel_id(_drag_layer, _drag_from): [_drag_layer, _drag_from]}
+	_pending_single = false
 	_drag = ""
 	_drag_layer = null
 	queue_redraw()
+
+
+# ================================================================ selection
+
+func _sel_id(layer: LayerData, f: int) -> String:
+	return "%s:%d" % [layer.id, f]
+
+
+func _start_key_drag(layer: LayerData, f: int) -> void:
+	_drag = "key"
+	_drag_layer = layer
+	_drag_from = f
+	_drag_to = f
+
+
+## What a drag moves: the whole selection if the grabbed drawing is in it,
+## otherwise just the grabbed drawing.
+func _drag_items() -> Array:
+	if _drag_layer != null and _sel.has(_sel_id(_drag_layer, _drag_from)):
+		return _sel.values()
+	return [[_drag_layer, _drag_from]]
+
+
+## Shift-click: every drawing between the anchor and (layer, f), on the
+## anchor's row, this row and the rows between.
+func _select_range(anchor: Array, layer: LayerData, f: int, add: bool) -> void:
+	var a_layer: LayerData = anchor[0]
+	var f0 := mini(int(anchor[1]), f)
+	var f1 := maxi(int(anchor[1]), f)
+	var rows := _rows()
+	var r0 := -1
+	var r1 := -1
+	for r in rows.size():
+		var row: Dictionary = rows[r]
+		if row["kind"] != "layer":
+			continue
+		if row["layer"] == a_layer:
+			r0 = r
+		if row["layer"] == layer:
+			r1 = r
+	if r0 < 0:
+		r0 = r1
+	if not add:
+		_sel = {}
+	for r in range(mini(r0, r1), maxi(r0, r1) + 1):
+		var row: Dictionary = rows[r]
+		if row["kind"] != "layer":
+			continue
+		var l: LayerData = row["layer"]
+		if l.is_character():
+			continue
+		for k in l.cels.keys():
+			var kf := int(k)
+			if kf >= f0 and kf <= f1:
+				_sel[_sel_id(l, kf)] = [l, kf]
+
+
+func clear_selection() -> void:
+	if _sel.is_empty():
+		return
+	_sel = {}
+	queue_redraw()
+
+
+## Drops selected drawings that no longer exist (after undo, delete, …).
+func _prune_selection() -> void:
+	if _drag != "":
+		return
+	var s := App.current_scene()
+	for id in _sel.keys():
+		var item: Array = _sel[id]
+		var l: LayerData = item[0]
+		if s == null or not s.layers.has(l) or not l.cels.has(int(item[1])):
+			_sel.erase(id)
 
 
 func _zoom_at(x: float, factor: float) -> void:

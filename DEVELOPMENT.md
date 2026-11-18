@@ -66,6 +66,17 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — select and move several drawings on the timeline
+
+- **Selecting:**
+  - Click a drawing to select it.
+  - **Ctrl/Cmd-click** adds or removes a drawing.
+  - **Shift-click** selects every drawing between the last clicked one and this one, across the rows in between too.
+  - Clicking an empty cell clears the selection.
+- **Moving:** selected drawings get a white outline. Dragging any of them moves the whole group, with a live preview.
+  - `Ops.move_keys({layer: [frames]}, delta)` makes it one undo step.
+  - It refuses to land a drawing before frame 1 or on a drawing that isn't moving.
+
 ## Update — check for updates / auto install
 
 - **Build numbers:** CI stamps `core/build_info.gd` (`BuildInfo.BUILD` = workflow run number, `COMMIT`, `DATE`) before exporting. It also publishes `version.json` with the same numbers on the `windows-latest` and `ios-latest` releases. Local copies are build 0 ("development copy").

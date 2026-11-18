@@ -463,6 +463,54 @@ func move_key(layer: LayerData, from: int, to: int) -> void:
 	App.set_frame(to)
 
 
+## Moves several drawings at once (possibly on several layers) by `delta`
+## frames, keeping their spacing. `groups` is {LayerData: [frame, …]}.
+## Refuses if a drawing would land before frame 1 or on a drawing that
+## isn't moving. One undo step. Returns true if it moved.
+func move_keys(groups: Dictionary, delta: int) -> bool:
+	if delta == 0 or groups.is_empty():
+		return false
+	var s := App.current_scene()
+	var plans: Array = []  # [layer, after]
+	var last := 0
+	var count := 0
+	for l in groups.keys():
+		var layer: LayerData = l
+		var frames: Array = groups[l]
+		var moving := {}
+		for f in frames:
+			if layer.cels.has(int(f)):
+				moving[int(f)] = true
+		if moving.is_empty():
+			continue
+		var after := layer.cels.duplicate()
+		for f in moving.keys():
+			after.erase(f)
+		for f in moving.keys():
+			var to: int = int(f) + delta
+			if to < 0:
+				App.status("Can't move drawings before frame 1")
+				return false
+			if after.has(to):
+				App.status("Frame %d on “%s” already has a drawing" % [to + 1, layer.name])
+				return false
+			after[to] = layer.cels[f]
+			last = maxi(last, to)
+			count += 1
+		plans.append([layer, after])
+	if plans.is_empty():
+		return false
+	var length := maxi(s.frame_count, last + 1)
+	ur.create_action("Move %d drawing%s" % [count, "" if count == 1 else "s"])
+	for p in plans:
+		var layer: LayerData = p[0]
+		ur.add_do_method(_set_cels.bind(layer, p[1], s, length))
+		ur.add_undo_method(_set_cels.bind(layer, layer.cels.duplicate(), s, s.frame_count))
+	ur.commit_action()
+	App.set_frame(clampi(App.frame + delta, 0, length - 1))
+	return true
+
+
 # ================================================================ 3D stage (floor, light, set pieces)
 
 func _set_stage(scene: SceneData, st: Dictionary) -> void:

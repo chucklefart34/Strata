@@ -167,7 +167,7 @@ func _ready() -> void:
 		body.custom_minimum_size.x = UI.px(200)
 		box.add_child(body)
 		steps.add_child(box)
-	var keys := UI.label("Shortcuts: B brush · P pencil · E eraser · G fill · I picker · L/U/O shapes · S/A select · V move · H hand · [ ] size · , . step frames · ← → previous/next drawing · Enter play · N new drawing · D duplicate · M marker · Ctrl+C/V copy/paste · Ctrl+Z undo · Ctrl+S save", "Small")
+	var keys := UI.label("Shortcuts: B brush · P pencil · E eraser · G fill · I picker · L/U/O shapes · S/A select · V move · H hand · [ ] size · , . step frames · ← → previous/next drawing · Ctrl/Shift-click drawings on the timeline to select several, then drag to move them · Enter play · N new drawing · D duplicate · M marker · Ctrl+C/V copy/paste · Ctrl+Z undo · Ctrl+S save", "Small")
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	guide.add_child(keys)
 
