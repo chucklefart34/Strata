@@ -654,7 +654,7 @@ func _matte_frame(img: Image, t: float, settings: Dictionary) -> Image:
 		if key != _auto_key or _auto_tracker.lut_image == null:
 			_auto_tracker.build_auto_model(img)
 			_auto_key = key
-		var amask := _auto_tracker.support_mask(img, Rect2(0, 0, 1, 1), float(settings["threshold"]), false)
+		var amask := _auto_tracker.support_mask(img, Rect2(0, 0, 1, 1), float(settings["threshold"]), false, true)
 		_matte.set_subject(_auto_tracker.lut_image, amask)
 		return await _matte.process(img)
 	if str(settings["mode"]) == "subject" or str(settings["mode"]) == "object":

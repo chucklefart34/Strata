@@ -103,7 +103,7 @@ func _run() -> void:
 		if mode == "auto":
 			var tr := SubjectTracker.new()
 			tr.build_auto_model(src)
-			var mask := tr.support_mask(src, Rect2(0, 0, 1, 1), float(s["threshold"]), false)
+			var mask := tr.support_mask(src, Rect2(0, 0, 1, 1), float(s["threshold"]), false, true)
 			save(mask, "auto_%s_mask" % bg)
 			m.set_subject(tr.lut_image, mask)
 		elif mode == "object":

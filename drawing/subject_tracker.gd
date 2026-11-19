@@ -482,7 +482,7 @@ func _mean_shift(img: Image, box: Rect2) -> Dictionary:
 # ================================================================ mask
 
 ## Low-res mask (FORMAT_L8, work size) of the subject in `img` at `box`.
-func support_mask(img: Image, box: Rect2, cut: float = 0.5, fallback: bool = true) -> Image:
+func support_mask(img: Image, box: Rect2, cut: float = 0.5, fallback: bool = true, main_only: bool = false) -> Image:
 	var work := work_image(img)
 	var w := work.get_width()
 	var h := work.get_height()
@@ -502,6 +502,8 @@ func support_mask(img: Image, box: Rect2, cut: float = 0.5, fallback: bool = tru
 			var prior := clampf(1.0 - maxf(dx, dy), 0.0, 1.0)
 			m[y * w + x] = 1 if p[y * w + x] * prior > cut else 0
 	_keep_subject_blobs(m, w, h, box)
+	if main_only:
+		_keep_main_blobs(m, w, h)
 	# Safety net: if the colour model found (almost) nothing inside the box,
 	# loosen the cut, and failing that keep an oval inside the box, so a
 	# subject is never wiped out completely.
@@ -585,6 +587,51 @@ func _keep_subject_blobs(m: PackedByteArray, w: int, h: int, box: Rect2) -> void
 			keep[l] = true
 	for i in w * h:
 		if m[i] != 0 and not keep.has(labels[i]):
+			m[i] = 0
+
+
+## Automatic mode: keeps the main subject — the blob scoring highest on
+## size × how central it is — plus any blob scoring at least half as well
+## (a second person beside them), and drops the rest (bright windows, lamps,
+## posters that just don't look like the edges of the frame).
+func _keep_main_blobs(m: PackedByteArray, w: int, h: int) -> void:
+	var labels := PackedInt32Array()
+	labels.resize(w * h)
+	var scores: Array[float] = [0.0]
+	var stack := PackedInt32Array()
+	var next := 1
+	for start in w * h:
+		if m[start] == 0 or labels[start] != 0:
+			continue
+		var count := 0
+		var sum := Vector2.ZERO
+		stack.clear()
+		stack.append(start)
+		labels[start] = next
+		while not stack.is_empty():
+			var idx := stack[stack.size() - 1]
+			stack.resize(stack.size() - 1)
+			count += 1
+			var x := idx % w
+			var y := idx / w
+			sum += Vector2(x, y)
+			for nb in [idx - 1 if x > 0 else -1, idx + 1 if x < w - 1 else -1, idx - w if y > 0 else -1, idx + w if y < h - 1 else -1]:
+				var n: int = nb
+				if n >= 0 and m[n] != 0 and labels[n] == 0:
+					labels[n] = next
+					stack.append(n)
+		var centre := sum / count
+		var off := Vector2((centre.x + 0.5) / w - 0.5, (centre.y + 0.5) / h - 0.5) * 2.0
+		var central := clampf(1.0 - off.length() * 0.75, 0.05, 1.0)
+		scores.append(float(count) * central * central)
+		next += 1
+	if next <= 2:
+		return
+	var best := 0.0
+	for l in range(1, next):
+		best = maxf(best, scores[l])
+	for i in w * h:
+		if m[i] != 0 and scores[labels[i]] < best * 0.5:
 			m[i] = 0
 
 
