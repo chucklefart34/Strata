@@ -1,0 +1,39 @@
+name: Diagnostics (matte test)
+
+# Runs the background-removal GPU passes on synthetic frames with a software
+# GPU and uploads the results. Only on the "diag" branch or by hand.
+on:
+  push:
+    branches: [diag]
+  workflow_dispatch:
+
+jobs:
+  matte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Software GPU + Godot
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mesa-vulkan-drivers libgl1-mesa-dri xvfb > /dev/null
+          V="4.7.2-stable"
+          curl -fsSL --retry 3 -o godot.zip "https://github.com/godotengine/godot/releases/download/${V}/Godot_v${V}_linux.x86_64.zip"
+          unzip -q godot.zip
+          echo "GODOT=$PWD/Godot_v${V}_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Run matte test
+        run: |
+          "$GODOT" --headless --path . --import > import.log 2>&1 || true
+          echo "===== Forward+ (Vulkan / lavapipe)"
+          timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-driver vulkan --script res://tools/matte_test.gd 2>&1 | grep -E "MATTE|ERROR|error" | head -60 || true
+          mkdir -p out/forward_plus && cp -r ~/.local/share/godot/app_userdata/*/matte_test/* out/forward_plus/ 2>/dev/null || true
+          rm -rf ~/.local/share/godot/app_userdata/*/matte_test
+          echo "===== Compatibility (OpenGL)"
+          timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-method gl_compatibility --script res://tools/matte_test.gd 2>&1 | grep -E "MATTE|ERROR|error" | head -60 || true
+          mkdir -p out/compat && cp -r ~/.local/share/godot/app_userdata/*/matte_test/* out/compat/ 2>/dev/null || true
+          ls -R out | head -50
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matte-test
+          path: out
