@@ -132,5 +132,16 @@ func _run() -> void:
 	var tst := stats(tout, 0.5)
 	save(tout, "roto_on_cutout_out")
 	print("MATTE roto on cut-out          background removed=%3d%%  subject kept=%3d%%" % [int(tst.x * 100), int(tst.y * 100)])
+	# contact sheet for the log
+	var names := ["auto_room_in", "auto_room_out", "background_room_out", "object_room_out", "colour_green_out", "roto_on_cutout_out"]
+	var sheet := Image.create_empty(960, 360, false, Image.FORMAT_RGB8)
+	for i in names.size():
+		var im := Image.load_from_file(out_dir.path_join(str(names[i]) + ".png"))
+		if im == null:
+			continue
+		im.convert(Image.FORMAT_RGB8)
+		im.resize(320, 180)
+		sheet.blit_rect(im, Rect2i(0, 0, 320, 180), Vector2i((i % 3) * 320, (i / 3) * 180))
+	print("SHEET:" + Marshalls.raw_to_base64(sheet.save_jpg_to_buffer(0.8)))
 	print("MATTE TEST done, files in ", ProjectSettings.globalize_path(out_dir))
 	quit()

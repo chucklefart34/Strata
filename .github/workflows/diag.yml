@@ -26,15 +26,13 @@ jobs:
         run: |
           "$GODOT" --headless --path . --import > import.log 2>&1 || true
           echo "===== Forward+ (Vulkan / lavapipe)"
-          timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-driver vulkan --script res://tools/matte_test.gd 2>&1 | grep -E "MATTE|ERROR|error" | head -60 || true
+          timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-driver vulkan --script res://tools/matte_test.gd 2>&1 | grep -E "MATTE|SHEET|ERROR|error" | head -60 || true
           mkdir -p out/forward_plus && cp -r ~/.local/share/godot/app_userdata/*/matte_test/* out/forward_plus/ 2>/dev/null || true
           rm -rf ~/.local/share/godot/app_userdata/*/matte_test
           echo "===== Compatibility (OpenGL)"
           timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-method gl_compatibility --script res://tools/matte_test.gd 2>&1 | grep -E "MATTE|ERROR|error" | head -60 || true
           mkdir -p out/compat && cp -r ~/.local/share/godot/app_userdata/*/matte_test/* out/compat/ 2>/dev/null || true
           ls -R out | head -50
-          cd out/forward_plus && montage auto_room_in.png auto_room_out.png background_room_out.png object_room_out.png colour_green_out.png roto_on_cutout_out.png -tile 3x2 -geometry 320x180+2+2 /tmp/sheet.png && cd ../..
-          echo "SHEET_BEGIN"; base64 -w0 /tmp/sheet.png; echo; echo "SHEET_END"
       - uses: actions/upload-artifact@v4
         with:
           name: matte-test
