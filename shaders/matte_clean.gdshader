@@ -4,14 +4,14 @@
 shader_type canvas_item;
 render_mode blend_disabled;
 
-uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
+uniform sampler2D src_tex : filter_linear;  // the key pass (its own viewport)
 uniform float radius = 2.0;     // cleanup strength in pixels (0 = off)
 uniform float grow = 0.0;       // -1 .. 1
 uniform float edge_soft = 0.08; // anti-alias width of the final edge
 
 void fragment() {
-	vec2 px = SCREEN_PIXEL_SIZE;
-	vec4 c = texture(screen_tex, SCREEN_UV);
+	vec2 px = 1.0 / vec2(textureSize(src_tex, 0));
+	vec4 c = texture(src_tex, UV);
 	float a = c.a;
 	if (radius > 0.3) {
 		int r = int(min(ceil(radius * 2.0), 12.0));
@@ -21,7 +21,7 @@ void fragment() {
 			for (int i = -r; i <= r; i++) {
 				vec2 o = vec2(float(i), float(j));
 				float w = exp(-dot(o, o) / (2.0 * radius * radius));
-				sum += texture(screen_tex, SCREEN_UV + o * px).a * w;
+				sum += texture(src_tex, UV + o * px).a * w;
 				wsum += w;
 			}
 		}

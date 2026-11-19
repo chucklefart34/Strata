@@ -1,9 +1,10 @@
 class_name MatteProcessor
 extends SubViewport
 ## Video import "Elements": decides which parts of each frame become the
-## layer. GPU passes in one render: key (background difference / colour /
-## brightness + keep-box) → BackBufferCopy → cleanup (fill holes, remove
-## specks, smooth or grow the edge). Also builds clean background plates
+## layer. Two GPU passes: key (background difference / colour / brightness +
+## keep-box) in its own viewport → cleanup (fill holes, remove specks, smooth
+## or grow the edge) here, reading the key result as a normal texture. (A
+## screen-texture copy loses the alpha on Forward+, so it isn't used.) Also builds clean background plates
 ## (per-pixel median of 9 frames) for "Remove still background".
 
 const KEY_SHADER := preload("res://shaders/matte_key.gdshader")
@@ -14,6 +15,7 @@ const MODES := ["everything", "background", "colour", "light", "dark", "subject"
 
 var _tex: ImageTexture
 var _source: TextureRect
+var _key_vp: SubViewport
 var _key_mat: ShaderMaterial
 var _clean_mat: ShaderMaterial
 var _clean_rect: ColorRect
@@ -41,13 +43,16 @@ func _init() -> void:
 	_key_mat = ShaderMaterial.new()
 	_key_mat.shader = KEY_SHADER
 	_source.material = _key_mat
-	add_child(_source)
-	var copy := BackBufferCopy.new()
-	copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
-	add_child(copy)
+	_key_vp = SubViewport.new()
+	_key_vp.transparent_bg = true
+	_key_vp.disable_3d = true
+	_key_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	add_child(_key_vp)
+	_key_vp.add_child(_source)
 	_clean_rect = ColorRect.new()
 	_clean_mat = ShaderMaterial.new()
 	_clean_mat.shader = CLEAN_SHADER
+	_clean_mat.set_shader_parameter("src_tex", _key_vp.get_texture())
 	_clean_rect.material = _clean_mat
 	add_child(_clean_rect)
 
@@ -74,6 +79,7 @@ static func is_active(settings: Dictionary) -> bool:
 ## spill, invert, cleanup, grow, crop, box: Rect2 (0..1), feather}
 func setup(w: int, h: int, settings: Dictionary) -> void:
 	size = Vector2i(maxi(16, w), maxi(16, h))
+	_key_vp.size = size
 	_source.size = Vector2(size)
 	_clean_rect.size = Vector2(size)
 	var k := h / 1080.0
@@ -150,6 +156,10 @@ func process(img: Image) -> Image:
 	else:
 		_tex.set_image(img)
 	_source.texture = _tex
+	_key_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	await RenderingServer.frame_post_draw
 	render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
-	return get_texture().get_image()
+	var out := get_texture().get_image()
+	out.convert(Image.FORMAT_RGBA8)
+	return out

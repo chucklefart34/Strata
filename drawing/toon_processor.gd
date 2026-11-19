@@ -174,8 +174,11 @@ func process(img: Image) -> Image:
 		_tex.set_image(img)
 	_source.texture = _tex
 	_line_source.texture = _tex
+	_lines_mat.set_shader_parameter("alpha_tex", _tex)
 	_line_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
 	render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
-	return get_texture().get_image()
+	var out := get_texture().get_image()
+	out.convert(Image.FORMAT_RGBA8)
+	return out

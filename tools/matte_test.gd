@@ -63,6 +63,8 @@ func stats(img: Image, t: float) -> Vector2:
 
 
 func save(img: Image, label: String) -> void:
+	img = img.duplicate() as Image
+	img.convert(Image.FORMAT_RGBA8)
 	var shown := Image.create_empty(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8)
 	shown.fill(Color(1, 0, 1))
 	shown.blend_rect(img, Rect2i(Vector2i.ZERO, img.get_size()), Vector2i.ZERO)
@@ -118,5 +120,17 @@ func _run() -> void:
 		var st := stats(out, 0.5)
 		save(out, "%s_%s_out" % [mode, bg])
 		print("MATTE %-10s on %-5s  out=%s fmt=%d  background removed=%3d%%  subject kept=%3d%%" % [mode, bg, out.get_size(), out.get_format(), int(st.x * 100), int(st.y * 100)])
+	# rotoscope a cut-out: the transparency must survive the toon passes
+	var s2 := base.duplicate()
+	s2["mode"] = "colour"
+	m.setup(W, H, s2)
+	var cut := await m.process(frame("green", 0.5))
+	var toon := ToonProcessor.new()
+	root.add_child(toon)
+	toon.setup(W, H, {"simplify": 7, "smooth": 6, "thickness": 2.0, "trace": true})
+	var tout := await toon.process(cut.duplicate() as Image)
+	var tst := stats(tout, 0.5)
+	save(tout, "roto_on_cutout_out")
+	print("MATTE roto on cut-out          background removed=%3d%%  subject kept=%3d%%" % [int(tst.x * 100), int(tst.y * 100)])
 	print("MATTE TEST done, files in ", ProjectSettings.globalize_path(out_dir))
 	quit()

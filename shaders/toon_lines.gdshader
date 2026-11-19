@@ -17,6 +17,9 @@ uniform float speck_radius = 0.0;   // 0 = no cleanup (shape smoothing does this
 uniform sampler2D trace_tex : filter_linear;  // traced line mask (red = ink)
 uniform bool use_trace = true;
 uniform bool area_lines = true;
+// The source frame: its alpha (a cut-out) is used for the result, because a
+// screen-texture copy loses alpha on Forward+.
+uniform sampler2D alpha_tex : filter_linear;
 
 bool same(vec3 a, vec3 b) {
 	vec3 d = abs(a - b);
@@ -61,7 +64,7 @@ vec3 cleaned(vec2 uv, vec2 px) {
 
 void fragment() {
 	vec2 px = SCREEN_PIXEL_SIZE;
-	float a = texture(screen_tex, SCREEN_UV).a;
+	float a = texture(alpha_tex, SCREEN_UV).a;
 	vec3 c = cleaned(SCREEN_UV, px);
 	float edge = 0.0;
 	if (area_lines && thickness > 0.0) {
@@ -74,7 +77,7 @@ void fragment() {
 				}
 				vec2 o_uv = SCREEN_UV + vec2(float(i), float(j)) * px;
 				vec4 o = texture(screen_tex, o_uv);
-				if (o.a < 0.5) {
+				if (texture(alpha_tex, o_uv).a < 0.5) {
 					continue; // no outline against transparent padding
 				}
 				vec3 d = abs(o.rgb - c);
