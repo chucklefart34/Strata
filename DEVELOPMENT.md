@@ -66,6 +66,15 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — background removal fixed on Forward+
+
+- **The bug:** in the Windows app (Forward+ renderer) background removal did nothing. The cleanup pass read the key pass through a BackBufferCopy / `hint_screen_texture`, and on Forward+ that copy loses alpha. Compatibility (OpenGL) was fine, so it never showed in an OpenGL test.
+- **The fix:**
+  - `MatteProcessor` now renders the key pass in its own SubViewport, and `matte_clean.gdshader` reads it as a normal `sampler2D`.
+  - The rotoscope's final pass (`toon_lines.gdshader`) takes alpha from the source frame (`alpha_tex`), so rotoscoped cut-outs stay cut out.
+- **Automatic mode** keeps only the main subject (size × centrality, plus anything scoring at least half as well). Bright windows and lamps aren't treated as the subject any more.
+- **Regression test:** `tools/matte_test.gd` runs every mode through the real GPU passes on synthetic frames, on a software Vulkan GPU in CI (the check job). The build fails if any mode stops removing background or loses the subject. `.github/workflows/diag.yml` (branch `diag`) runs it on both renderers and prints a contact sheet.
+
 ## Update — select and move several drawings on the timeline
 
 - **Selecting:**
