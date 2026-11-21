@@ -35,6 +35,12 @@ var keep_size: bool = true
 ## many frames each wobble lasts (1 = every frame … 4).
 var boil: float = 0.0
 var boil_speed: int = 2
+## Border effect (like Clip Studio's): an outline of `border` pixels around
+## every shape on the layer, in `border_color`; with `border_inner` also a
+## line where two colours meet. 0 = off.
+var border: float = 0.0
+var border_color: Color = Color.BLACK
+var border_inner: bool = true
 ## 3D orientation: turn = around the vertical axis, tilt = lean back/forward.
 var turn_deg: float = 0.0
 var tilt_deg: float = 0.0
@@ -175,6 +181,15 @@ func has_boil() -> bool:
 	return boil > 0.001 and not is_character()
 
 
+func has_border() -> bool:
+	return border > 0.01 and not is_character()
+
+
+## True when the layer is drawn through the effects shader (boil / border).
+func has_fx() -> bool:
+	return has_boil() or has_border()
+
+
 ## Which wobble to show at `frame`: changes every `boil_speed` frames and
 ## differs per layer, so layers don't wobble in sync.
 func boil_step(frame: int) -> float:
@@ -209,6 +224,9 @@ func to_dict() -> Dictionary:
 		"cast_shadow": cast_shadow,
 		"boil": boil,
 		"boil_speed": boil_speed,
+		"border": border,
+		"border_color": border_color.to_html(true),
+		"border_inner": border_inner,
 		"cels": cel_list,
 		"motion_keys": KeyTrack.to_list(motion_keys, MOTION_FIELDS, static_motion()),
 		"character_id": character_id,
@@ -255,6 +273,9 @@ static func from_dict(d: Dictionary, cel_dir: String) -> LayerData:
 	l.cast_shadow = bool(d.get("cast_shadow", true))
 	l.boil = clampf(float(d.get("boil", 0.0)), 0.0, 1.0)
 	l.boil_speed = clampi(int(d.get("boil_speed", 2)), 1, 4)
+	l.border = clampf(float(d.get("border", 0.0)), 0.0, 16.0)
+	l.border_color = Color.from_string(str(d.get("border_color", "000000ff")), Color.BLACK)
+	l.border_inner = bool(d.get("border_inner", true))
 	l.motion_keys = KeyTrack.from_list(d.get("motion_keys", []), MOTION_FIELDS, l.static_motion())
 	l.character_id = str(d.get("character_id", ""))
 	l.pose_keys = _list_to_dict_track(d.get("pose_keys", []))
@@ -286,6 +307,9 @@ func clone_deep() -> LayerData:
 	l.cast_shadow = cast_shadow
 	l.boil = boil
 	l.boil_speed = boil_speed
+	l.border = border
+	l.border_color = border_color
+	l.border_inner = border_inner
 	l.motion_keys = motion_keys.duplicate(true)
 	l.character_id = character_id
 	l.pose_keys = pose_keys.duplicate(true)

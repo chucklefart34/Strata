@@ -19,13 +19,14 @@ var _color_btn: ColorPickerButton
 var _swatches: GridContainer
 
 
-const LASSO_MODES := ["trace", "outline", "fill"]
-const LASSO_LABELS := ["Trace lines inside", "Clean outline", "Fill"]
+const LASSO_MODES := ["shape", "trace", "outline", "fill"]
+const LASSO_LABELS := ["Shape (colour + auto outline)", "Trace lines inside", "Clean outline", "Fill"]
 var _lasso_box: VBoxContainer
 var _lasso_mode: OptionButton
 var _lasso_hint: Label
 var _lasso_detail: HSlider
 var _lasso_behind: CheckBox
+var _lasso_new_layer: CheckBox
 
 func _ready() -> void:
 	add_theme_constant_override("separation", int(UI.px(10)))
@@ -70,6 +71,13 @@ func _ready() -> void:
 	_lasso_behind.focus_mode = Control.FOCUS_NONE
 	_lasso_behind.toggled.connect(func(on: bool) -> void: App.lasso_behind = on)
 	_lasso_box.add_child(_lasso_behind)
+	_lasso_new_layer = CheckBox.new()
+	_lasso_new_layer.text = "Each shape on a new layer"
+	_lasso_new_layer.tooltip_text = "Puts every shape on its own layer, so even two shapes of the same colour get a line between them. Off: shapes share the layer and lines appear where colours meet."
+	_lasso_new_layer.button_pressed = App.lasso_new_layer
+	_lasso_new_layer.focus_mode = Control.FOCUS_NONE
+	_lasso_new_layer.toggled.connect(func(on: bool) -> void: App.lasso_new_layer = on)
+	_lasso_box.add_child(_lasso_new_layer)
 
 	var color := UI.section(self, "Color")
 	var row := UI.hbox(8)
@@ -172,7 +180,9 @@ func _sync_lasso() -> void:
 	var mode := App.lasso_mode
 	_lasso_detail.get_parent().visible = mode == "trace"
 	_lasso_behind.visible = mode == "fill"
+	_lasso_new_layer.visible = mode == "shape"
 	_lasso_hint.text = {
+		"shape": "Lasso a solid colour shape. The layer's Border draws the lineart around it automatically (turned on for you; set width and colour in the Layers panel). Block in shapes over a sketch — newer shapes sit on top, and lines appear where colours meet.",
 		"trace": "Traces clean lines from the picture inside the loop — an imported video frame, a reference or the 3D guide (everything visible except this layer). Line thickness = brush Size, colour = current colour.",
 		"outline": "Your rough loop becomes a smooth, even ink line in the current colour and brush size. Great for quick shapes, eyes, props.",
 		"fill": "Fills the loop with the current colour. With “behind my lines” on, it colours under the lines already on this layer.",

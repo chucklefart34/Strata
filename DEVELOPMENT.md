@@ -113,6 +113,17 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - **Shift+← / →** step one frame; `,` and `.` still step one frame too.
 - Arrows still work normally inside text fields.
 
+## Update — lasso Shape mode + layer Border effect (Clip Studio style)
+
+- **Reference:** "lasso fill + border effect" lineart, where solid colour blocks get an automatic outline.
+- **Layer Border** (`LayerData.border` px 0–16, `border_color`, `border_inner`), set in the Layers panel.
+  - Rendered live by the per-layer effects shader (`layer_boil.gdshader` on the canvas, `layer_boil_3d.gdshader` for 3D / renders, together with line boil).
+  - Draws an antialiased outline outside every shape and, with "Also where colours meet", a line between two colours on the layer.
+- **Lasso Shape mode** (now the default):
+  - Fills a solid block on top.
+  - Turns the layer's border on (about 5 px at 1080p) if it was off.
+  - Optionally puts each shape on its own new layer.
+
 ## Update — AI service removed
 
 - The "Draw from a prompt" panel and `drawing/ai_draw.gd` are gone. On start, `ProjectIO` deletes any saved `ai_*` settings, including API keys.

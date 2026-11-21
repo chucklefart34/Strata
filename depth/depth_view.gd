@@ -480,7 +480,7 @@ func refresh() -> void:
 		mi.visible = layer.visible and tex != null and not layer.is_reference()
 		var op := clampf(float(m["opacity"]), 0.0, 1.0)
 		# Line boil: unlit drawing layers use a wobbling shader instead.
-		if layer.has_boil() and not layer.lit:
+		if layer.has_fx() and not layer.lit:
 			var bm: ShaderMaterial = _boil_mats.get(layer.id)
 			if bm == null:
 				bm = ShaderMaterial.new()
@@ -488,7 +488,10 @@ func refresh() -> void:
 				_boil_mats[layer.id] = bm
 			bm.set_shader_parameter("tex", tex)
 			bm.set_shader_parameter("opacity", op)
-			bm.set_shader_parameter("amount", layer.boil_pixels())
+			bm.set_shader_parameter("amount", layer.boil_pixels() if layer.has_boil() else 0.0)
+			bm.set_shader_parameter("border", layer.border if layer.has_border() else 0.0)
+			bm.set_shader_parameter("border_color", layer.border_color)
+			bm.set_shader_parameter("border_inner", layer.border_inner)
 			bm.set_shader_parameter("step_k", layer.boil_step(App.frame))
 			bm.set_shader_parameter("tex_size", Vector2(App.project.width, App.project.height))
 			mi.material_override = bm

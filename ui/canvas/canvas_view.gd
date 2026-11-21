@@ -416,15 +416,18 @@ func _redraw_art() -> void:
 		it.visible = i < layers.size()
 		if i < layers.size():
 			var layer: LayerData = layers[i]
-			if layer.has_boil() and provider == null:
+			if layer.has_fx() and provider == null:
 				var mat := it.material as ShaderMaterial
 				if mat == null:
 					mat = ShaderMaterial.new()
 					mat.shader = BOIL_SHADER
 					it.material = mat
-				mat.set_shader_parameter("amount", layer.boil_pixels())
+				mat.set_shader_parameter("amount", layer.boil_pixels() if layer.has_boil() else 0.0)
 				mat.set_shader_parameter("step_k", layer.boil_step(_frame_for(layer)))
 				mat.set_shader_parameter("tex_size", canvas_size())
+				mat.set_shader_parameter("border", layer.border if layer.has_border() else 0.0)
+				mat.set_shader_parameter("border_color", layer.border_color)
+				mat.set_shader_parameter("border_inner", layer.border_inner)
 			else:
 				it.material = null
 		it.queue_redraw()
@@ -970,10 +973,12 @@ func _finish_lasso(raw: PackedVector2Array) -> void:
 	if bounds.size.x < 3 or bounds.size.y < 3:
 		return
 	match App.lasso_mode:
+		"shape":
+			_lasso_shape(poly, bounds)
 		"outline":
 			_lasso_outline(poly)
 		"fill":
-			_lasso_fill(poly, bounds)
+			_lasso_fill(poly, bounds, App.lasso_behind)
 		_:
 			_lasso_trace(poly, bounds)
 	_redraw_art()
@@ -1057,7 +1062,29 @@ func _lasso_outline(poly: PackedVector2Array) -> void:
 	_stroke_end("Lasso outline")
 
 
-func _lasso_fill(poly: PackedVector2Array, r: Rect2i) -> void:
+## Lasso-fill a solid colour block on top, on a layer with the border effect
+## on, so the outline appears around it by itself (the Clip Studio "lasso
+## fill + border effect" way of building lineart from colour shapes).
+func _lasso_shape(poly: PackedVector2Array, r: Rect2i) -> void:
+	var layer := _editable_layer()
+	if layer == null:
+		return
+	var width := layer.border if layer.has_border() else maxf(2.0, roundf(canvas_size().y / 220.0))
+	if App.lasso_new_layer and provider == null:
+		var nl := Ops.add_layer("Shape")
+		if nl == null:
+			return
+		nl.border = width
+		nl.border_color = layer.border_color
+		nl.border_inner = layer.border_inner
+		App.notify_layers()
+	elif not layer.has_border():
+		Ops.set_layer_prop(layer, "border", width)
+		App.status("Border turned on for “%s” (%.0f px) — change its width and colour in the Layers panel" % [layer.name, width])
+	_lasso_fill(poly, r, false)
+
+
+func _lasso_fill(poly: PackedVector2Array, r: Rect2i, behind: bool) -> void:
 	var cel := _editable_cel(true)
 	if cel == null:
 		return
@@ -1078,7 +1105,7 @@ func _lasso_fill(poly: PackedVector2Array, r: Rect2i) -> void:
 			bytes[i * 4 + 2] = cb
 			bytes[i * 4 + 3] = a8
 	var layer_img := Image.create_from_data(r.size.x, r.size.y, false, Image.FORMAT_RGBA8, bytes)
-	if App.lasso_behind:
+	if behind:
 		# colour under what's already drawn: existing pixels go on top
 		layer_img.blend_rect(img.get_region(r), Rect2i(Vector2i.ZERO, r.size), Vector2i.ZERO)
 		img.blit_rect(layer_img, Rect2i(Vector2i.ZERO, r.size), r.position)

@@ -52,9 +52,11 @@ var brush_opacity: float = 1.0
 var brush_hardness: float = 0.8
 var stabilizer: float = 0.25
 var pressure_size: bool = true
-## Lasso lineart tool: "trace" (trace lines from the picture inside the loop),
+## Lasso lineart tool: "shape" (fill a solid colour block; the layer's border
+## effect draws the lineart around it), "trace" (trace lines from the picture inside the loop),
 ## "outline" (the loop becomes a clean ink line) or "fill" (fill the loop).
-var lasso_mode: String = "trace"
+var lasso_mode: String = "shape"
+var lasso_new_layer: bool = false  # shape: each shape on its own new layer
 var lasso_behind: bool = true   # fill goes under the lines already drawn
 var lasso_detail: float = 10.0  # trace: 1 = only strong edges … 20 = every detail
 var palette: Array[Color] = [

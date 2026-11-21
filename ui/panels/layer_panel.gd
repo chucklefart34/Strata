@@ -14,6 +14,9 @@ var _name_edit: LineEdit
 var _opacity: HSlider
 var _boil: HSlider
 var _boil_speed: OptionButton
+var _border: HSlider
+var _border_color: ColorPickerButton
+var _border_inner: CheckBox
 var _role: OptionButton
 var _import_dialog: FileDialog
 var _import_as_reference: bool = false
@@ -82,6 +85,29 @@ func _ready() -> void:
 		if l != null:
 			Ops.set_layer_prop(l, "boil_speed", i + 1))
 	bs_row.add_child(_boil_speed)
+	_border = UI.slider(props, "Border (auto outline)", 0, 16, 0.5, 0, _on_border, "%.1f px")
+	_border.tooltip_text = "Draws a line around every shape on this layer, like Clip Studio's border effect. Block in colours with the Lasso tool (Shape mode) and the lineart appears by itself. 0 = off."
+	var br := UI.hbox(6)
+	props.add_child(br)
+	_border_color = ColorPickerButton.new()
+	_border_color.edit_alpha = false
+	_border_color.custom_minimum_size = UI.size2(44, 28)
+	_border_color.focus_mode = Control.FOCUS_NONE
+	_border_color.tooltip_text = "Border colour"
+	_border_color.popup_closed.connect(func() -> void:
+		var l := App.current_layer()
+		if l != null and l.border_color != _border_color.color:
+			Ops.set_layer_prop(l, "border_color", _border_color.color))
+	br.add_child(_border_color)
+	_border_inner = CheckBox.new()
+	_border_inner.text = "Also where colours meet"
+	_border_inner.focus_mode = Control.FOCUS_NONE
+	_border_inner.tooltip_text = "Draws the line between two different colours on the same layer too (hair against face), not only around the outside."
+	_border_inner.toggled.connect(func(on: bool) -> void:
+		var l := App.current_layer()
+		if l != null and l.border_inner != on:
+			Ops.set_layer_prop(l, "border_inner", on))
+	br.add_child(_border_inner)
 
 	for sig: Signal in [App.project_opened, App.scene_switched, App.layers_changed, App.layer_selected, App.stage_changed]:
 		sig.connect(_rebuild)
@@ -117,6 +143,12 @@ func _rebuild() -> void:
 		_boil_speed.select(clampi(active.boil_speed - 1, 0, 3))
 		_boil.editable = not active.is_character()
 		_boil_speed.disabled = active.is_character() or active.boil <= 0.001
+		UI.set_slider(_border, active.border)
+		_border.editable = not active.is_character()
+		_border_color.color = active.border_color
+		_border_color.disabled = active.is_character()
+		_border_inner.set_pressed_no_signal(active.border_inner)
+		_border_inner.disabled = active.is_character()
 		var role_idx := ROLE_LABELS.keys().find(active.role)
 		_role.select(maxi(0, role_idx))
 
@@ -232,6 +264,12 @@ func _on_role(idx: int) -> void:
 		return
 	var role: String = ROLE_LABELS.keys()[idx]
 	Ops.set_layer_prop(l, "role", role)
+
+
+func _on_border(v: float) -> void:
+	var l := App.current_layer()
+	if l != null and not l.is_character() and absf(l.border - v) > 0.001:
+		Ops.set_layer_prop(l, "border", v)
 
 
 func _on_boil(v: float) -> void:
