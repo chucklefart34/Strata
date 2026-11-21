@@ -464,12 +464,7 @@ func draw_over(ci: CanvasItem) -> void:
 	_draw_selection(ci)
 
 	if _active and App.tool == LASSO_LINE and _lasso_path.size() > 1:
-		var lc: Color = App.color
-		lc.a = 1.0
-		var lw := maxf(1.5 / zoom, App.brush_size if App.lasso_mode == "outline" else 1.5 / zoom)
-		ci.draw_polyline(_lasso_path, Color(1, 1, 1, 0.7), lw + 2.0 / zoom, true)
-		ci.draw_polyline(_lasso_path, lc, lw, true)
-		ci.draw_dashed_line(_lasso_path[_lasso_path.size() - 1], _lasso_path[0], lc, 1.5 / zoom, 6.0 / zoom)
+		_draw_lasso_preview(ci)
 
 	if _hovering and PAINT_TOOLS.has(App.tool) and not _panning:
 		var r := maxf(App.brush_size * 0.5, 1.5 / zoom)
@@ -963,6 +958,61 @@ func _do_fill(pos: Vector2) -> void:
 
 
 # ================================================================ lasso lineart
+
+## Live preview while the loop is drawn: what you'll get, not a guide line.
+##   shape   — the solid colour block with the layer's outline around it
+##   fill    — the solid colour block
+##   outline — the closed ink line at brush size
+##   trace   — a thin loop (the tracing happens when you let go)
+func _draw_lasso_preview(ci: CanvasItem) -> void:
+	var col: Color = App.color
+	col.a = 1.0
+	var path := _lasso_path
+	var closed := path.duplicate()
+	closed.append(path[0])
+	match App.lasso_mode:
+		"shape", "fill":
+			if App.lasso_mode == "shape":
+				var layer := _active_layer()
+				var bw := 0.0
+				var bc := Color.BLACK
+				if layer != null:
+					bw = layer.border if layer.has_border() else maxf(2.0, roundf(canvas_size().y / 220.0))
+					bc = layer.border_color
+				if bw > 0.0:
+					# the outline sits outside the shape: a line twice as wide,
+					# half of it then covered by the fill
+					ci.draw_polyline(closed, bc, bw * 2.0, true)
+			if path.size() >= 3:
+				for poly in _simple_polygons(path):
+					var tris := Geometry2D.triangulate_polygon(poly)
+					if tris.is_empty():
+						continue
+					var cols := PackedColorArray()
+					cols.resize(poly.size())
+					cols.fill(col)
+					ci.draw_polygon(poly, cols)
+		"outline":
+			ci.draw_polyline(closed, col, maxf(App.brush_size, 1.0 / zoom), true)
+		_:
+			var lw := 1.5 / zoom
+			ci.draw_polyline(path, Color(1, 1, 1, 0.7), lw + 2.0 / zoom, true)
+			ci.draw_polyline(path, col, lw, true)
+			ci.draw_dashed_line(path[path.size() - 1], path[0], col, lw, 6.0 / zoom)
+
+
+## A hand-drawn loop can cross itself; split it into simple outer polygons
+## that can be filled.
+func _simple_polygons(path: PackedVector2Array) -> Array:
+	if Geometry2D.triangulate_polygon(path).size() > 0:
+		return [path]
+	var out: Array = []
+	for poly in Geometry2D.merge_polygons(path, path):
+		var pp: PackedVector2Array = poly
+		if pp.size() >= 3:
+			out.append(pp)
+	return out
+
 
 ## What the lasso does when the loop is closed (see App.lasso_mode).
 func _finish_lasso(raw: PackedVector2Array) -> void:

@@ -119,6 +119,7 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - **Layer Border** (`LayerData.border` px 0–16, `border_color`, `border_inner`), set in the Layers panel.
   - Rendered live by the per-layer effects shader (`layer_boil.gdshader` on the canvas, `layer_boil_3d.gdshader` for 3D / renders, together with line boil).
   - Draws an antialiased outline outside every shape and, with "Also where colours meet", a line between two colours on the layer.
+- **Live preview** while drawing the loop: Shape shows the filled block with the layer outline; Fill shows the block; Outline shows the final ink line; Trace shows a thin loop. Self-crossing loops are split with `Geometry2D.merge_polygons` before triangulating.
 - **Lasso Shape mode** (now the default):
   - Fills a solid block on top.
   - Turns the layer's border on (about 5 px at 1080p) if it was off.
