@@ -163,6 +163,22 @@ func setup(w: int, h: int, settings: Dictionary) -> void:
 	_lines_mat.set_shader_parameter("speck_radius", 0.0)
 
 
+## Only the traced lines: a mask where white = ink, black = nothing.
+func trace_lines(img: Image) -> Image:
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	if _tex.get_width() == img.get_width() and _tex.get_height() == img.get_height():
+		_tex.update(img)
+	else:
+		_tex.set_image(img)
+	_line_source.texture = _tex
+	_line_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	await RenderingServer.frame_post_draw
+	var out := _line_vp.get_texture().get_image()
+	out.convert(Image.FORMAT_L8)
+	return out
+
+
 ## Returns the processed image. Renders the line mask first, then the fills
 ## with the lines composited on top.
 func process(img: Image) -> Image:

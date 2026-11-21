@@ -12,6 +12,7 @@ const ONION_SHADER := preload("res://shaders/onion.gdshader")
 const PAINT_TOOLS := ["brush", "pencil", "eraser"]
 const SHAPE_TOOLS := ["line", "rect", "ellipse"]
 const SELECT_TOOLS := ["select", "lasso"]
+const LASSO_LINE := "lassoline"
 
 ## Shared clipboard so you can copy in Draw and paste in Animate (or another scene).
 static var clipboard: Image = null
@@ -25,6 +26,9 @@ var _fit_pending: bool = true
 var _checker: ImageTexture
 var _onion_view: OnionView
 var _art_view: ArtView
+var _lasso_path := PackedVector2Array()  # lasso lineart loop being drawn
+var _lasso_busy: bool = false
+var _tracer: ToonProcessor
 var _layer_items: Array[LayerItem] = []
 var _top_item: TopItem
 const BOIL_SHADER := preload("res://shaders/layer_boil.gdshader")
@@ -456,6 +460,14 @@ func draw_over(ci: CanvasItem) -> void:
 
 	_draw_selection(ci)
 
+	if _active and App.tool == LASSO_LINE and _lasso_path.size() > 1:
+		var lc: Color = App.color
+		lc.a = 0.9
+		var lw := maxf(1.5 / zoom, App.brush_size if App.lasso_mode == "outline" else 1.5 / zoom)
+		ci.draw_polyline(_lasso_path, Color(1, 1, 1, 0.7), lw + 2.0 / zoom, true)
+		ci.draw_polyline(_lasso_path, lc, lw, true)
+		ci.draw_dashed_line(_lasso_path[_lasso_path.size() - 1], _lasso_path[0], lc, 1.5 / zoom, 6.0 / zoom)
+
 	if _hovering and PAINT_TOOLS.has(App.tool) and not _panning:
 		var r := maxf(App.brush_size * 0.5, 1.5 / zoom)
 		ci.draw_arc(cursor, r + 1.0 / zoom, 0.0, TAU, 48, Color(0, 0, 0, 0.55), -1.0, true)
@@ -678,6 +690,7 @@ func _cancel_stroke() -> void:
 		App.notify_pixels()
 	_cel = null
 	_has_dirty = false
+	_lasso_path = PackedVector2Array()
 	refresh()
 
 
@@ -706,6 +719,11 @@ func _begin(pos: Vector2, pressure: float) -> void:
 		_active = true
 	elif SELECT_TOOLS.has(tool):
 		_sel_begin(pos)
+		_active = true
+	elif tool == LASSO_LINE:
+		if _lasso_busy or _editable_layer() == null:
+			return
+		_lasso_path = PackedVector2Array([pos])
 		_active = true
 	elif tool == "fill":
 		_do_fill(pos)
@@ -766,6 +784,9 @@ func _continue(pos: Vector2, pressure: float) -> void:
 		_last = _constrain(_start, pos)
 	elif SELECT_TOOLS.has(tool):
 		_sel_continue(pos)
+	elif tool == LASSO_LINE:
+		if _lasso_path.size() > 0 and pos.distance_to(_lasso_path[_lasso_path.size() - 1]) * zoom >= 2.0:
+			_lasso_path.append(pos)
 	elif tool == "move":
 		move_offset = pos - _start
 
@@ -796,6 +817,11 @@ func _end(pos: Vector2) -> void:
 		_stroke_end("Draw " + tool)
 	elif SELECT_TOOLS.has(tool):
 		_sel_end()
+	elif tool == LASSO_LINE:
+		_lasso_path.append(pos)
+		var loop := _lasso_path
+		_lasso_path = PackedVector2Array()
+		_finish_lasso(loop)
 	elif tool == "move" and _cel != null:
 		var off := Vector2i(move_offset.round())
 		if off != Vector2i.ZERO:
@@ -876,7 +902,7 @@ func _dab(p: Vector2, pressure: float) -> void:
 		var hard: float = App.brush_hardness
 		if tool == "pencil":
 			hard = 1.0
-		elif SHAPE_TOOLS.has(tool):
+		elif SHAPE_TOOLS.has(tool) or tool == LASSO_LINE:
 			hard = maxf(hard, 0.85)
 		var c: Color = App.color
 		c.a = _flow()
@@ -927,6 +953,227 @@ func _do_fill(pos: Vector2) -> void:
 	if r.has_area():
 		_mark_dirty(r)
 	_stroke_end("Fill")
+
+
+# ================================================================ lasso lineart
+
+## What the lasso does when the loop is closed (see App.lasso_mode).
+func _finish_lasso(raw: PackedVector2Array) -> void:
+	if raw.size() < 4:
+		return
+	var poly := _smooth_loop(raw, App.lasso_mode == "outline")
+	var bounds := _poly_rect(poly)
+	if bounds.size.x < 3 or bounds.size.y < 3:
+		return
+	match App.lasso_mode:
+		"outline":
+			_lasso_outline(poly)
+		"fill":
+			_lasso_fill(poly, bounds)
+		_:
+			_lasso_trace(poly, bounds)
+	_redraw_art()
+
+
+## Evens out the hand-drawn loop: resample to steady spacing, then round the
+## corners (Chaikin). Outlines get extra smoothing.
+func _smooth_loop(raw: PackedVector2Array, strong: bool) -> PackedVector2Array:
+	var step := maxf(2.0, App.brush_size * 0.5) if strong else 2.0
+	var even := PackedVector2Array([raw[0]])
+	var carry := 0.0
+	for i in range(1, raw.size() + 1):
+		var a := raw[i - 1]
+		var b := raw[i % raw.size()]
+		var d := a.distance_to(b)
+		var t := step - carry
+		while t <= d:
+			even.append(a.lerp(b, t / d))
+			t += step
+		carry = d - (t - step)
+	if even.size() < 3:
+		return raw
+	var pts := even
+	for _pass in (3 if strong else 1):
+		var next := PackedVector2Array()
+		for i in pts.size():
+			var a := pts[i]
+			var b := pts[(i + 1) % pts.size()]
+			next.append(a.lerp(b, 0.25))
+			next.append(a.lerp(b, 0.75))
+		pts = next
+	return pts
+
+
+func _poly_rect(poly: PackedVector2Array) -> Rect2i:
+	var lo := poly[0]
+	var hi := poly[0]
+	for p in poly:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var r := Rect2i(Vector2i(lo.floor()), Vector2i((hi - lo).ceil()) + Vector2i(2, 2))
+	return r.intersection(Rect2i(Vector2i.ZERO, Vector2i(canvas_size())))
+
+
+## Inside-the-loop mask for `r` (1 byte per pixel, 255 = inside), even-odd
+## scanlines through pixel centres.
+static func _poly_mask(poly: PackedVector2Array, r: Rect2i) -> PackedByteArray:
+	var m := PackedByteArray()
+	m.resize(r.size.x * r.size.y)
+	var n := poly.size()
+	var xs := PackedFloat32Array()
+	for row in r.size.y:
+		var y := r.position.y + row + 0.5
+		xs.clear()
+		for i in n:
+			var a := poly[i]
+			var b := poly[(i + 1) % n]
+			if (a.y <= y and b.y > y) or (b.y <= y and a.y > y):
+				xs.append(a.x + (y - a.y) / (b.y - a.y) * (b.x - a.x))
+		xs.sort()
+		var k := 0
+		while k + 1 < xs.size():
+			var x0 := clampi(int(ceil(xs[k] - 0.5)) - r.position.x, 0, r.size.x)
+			var x1 := clampi(int(ceil(xs[k + 1] - 0.5)) - r.position.x, 0, r.size.x)
+			var base := row * r.size.x
+			for x in range(x0, x1):
+				m[base + x] = 255
+			k += 2
+	return m
+
+
+func _lasso_outline(poly: PackedVector2Array) -> void:
+	var cel := _editable_cel(true)
+	if cel == null:
+		return
+	_stroke_begin(cel)
+	_dab(poly[0], 1.0)
+	_carry = _spacing()
+	for i in range(1, poly.size() + 1):
+		_segment(poly[i - 1], poly[i % poly.size()], 1.0, 1.0)
+	_stroke_end("Lasso outline")
+
+
+func _lasso_fill(poly: PackedVector2Array, r: Rect2i) -> void:
+	var cel := _editable_cel(true)
+	if cel == null:
+		return
+	_stroke_begin(cel)
+	var img := cel.image
+	var m := _poly_mask(poly, r)
+	var c: Color = App.color
+	var a8 := int(round(clampf(App.brush_opacity, 0.0, 1.0) * 255.0))
+	var bytes := PackedByteArray()
+	bytes.resize(m.size() * 4)
+	var cr := c.r8
+	var cg := c.g8
+	var cb := c.b8
+	for i in m.size():
+		if m[i] != 0:
+			bytes[i * 4] = cr
+			bytes[i * 4 + 1] = cg
+			bytes[i * 4 + 2] = cb
+			bytes[i * 4 + 3] = a8
+	var layer_img := Image.create_from_data(r.size.x, r.size.y, false, Image.FORMAT_RGBA8, bytes)
+	if App.lasso_behind:
+		# colour under what's already drawn: existing pixels go on top
+		layer_img.blend_rect(img.get_region(r), Rect2i(Vector2i.ZERO, r.size), Vector2i.ZERO)
+		img.blit_rect(layer_img, Rect2i(Vector2i.ZERO, r.size), r.position)
+	else:
+		img.blend_rect(layer_img, Rect2i(Vector2i.ZERO, r.size), r.position)
+	_mark_dirty(r)
+	_stroke_end("Lasso fill")
+
+
+## Everything visible except the active layer, flattened on white: what the
+## lasso traces (video frames, references, the 3D guide, other layers).
+func _trace_source() -> Image:
+	var cs := Vector2i(canvas_size())
+	var out := Image.create_empty(cs.x, cs.y, false, Image.FORMAT_RGBA8)
+	out.fill(Color.WHITE)
+	var any := false
+	var guide := _guide_texture()
+	if guide != null:
+		var g := guide.get_image()
+		if g != null:
+			g.convert(Image.FORMAT_RGBA8)
+			if g.get_size() != cs:
+				g.resize(cs.x, cs.y, Image.INTERPOLATE_BILINEAR)
+			out.blend_rect(g, Rect2i(Vector2i.ZERO, cs), Vector2i.ZERO)
+			any = true
+	var active := _active_layer()
+	for l in _layers():
+		var layer: LayerData = l
+		if layer == active or not layer.visible:
+			continue
+		var tex: Texture2D = null
+		if layer.is_character():
+			tex = Rigs.texture_for(layer)
+		else:
+			var cel := layer.cel_at(_frame_for(layer))
+			if cel != null:
+				tex = cel.get_texture()
+		if tex == null:
+			continue
+		var li := tex.get_image()
+		if li == null:
+			continue
+		li.convert(Image.FORMAT_RGBA8)
+		out.blend_rect(li, Rect2i(Vector2i.ZERO, li.get_size()), Vector2i.ZERO)
+		any = true
+	return out if any else null
+
+
+func _lasso_trace(poly: PackedVector2Array, r: Rect2i) -> void:
+	var src := _trace_source()
+	if src == null:
+		App.status("Nothing under the lasso to trace — import a video, add a reference, or show another layer, then lasso around it")
+		return
+	if _editable_layer() == null:
+		return
+	_lasso_busy = true
+	App.status("Tracing…")
+	if _tracer == null:
+		_tracer = ToonProcessor.new()
+		add_child(_tracer)
+	var cs := canvas_size()
+	var k := cs.y / 1080.0
+	_tracer.setup(int(cs.x), int(cs.y), {
+		"simplify": 4, "smooth": 0, "trace": true,
+		"thickness": maxf(0.6, App.brush_size * 0.5) / maxf(k, 0.01),
+		"line_detail": App.lasso_detail, "line_smooth": 6,
+	})
+	var lines := await _tracer.trace_lines(src)
+	_lasso_busy = false
+	var cel := _editable_cel(true)
+	if cel == null or lines == null:
+		return
+	var m := _poly_mask(poly, r)
+	var ink := lines.get_region(r).get_data()  # L8, 255 = ink
+	var c: Color = App.color
+	var op := clampf(App.brush_opacity, 0.0, 1.0)
+	var bytes := PackedByteArray()
+	bytes.resize(m.size() * 4)
+	var cr := c.r8
+	var cg := c.g8
+	var cb := c.b8
+	var found := 0
+	for i in m.size():
+		if m[i] != 0 and ink[i] > 8:
+			bytes[i * 4] = cr
+			bytes[i * 4 + 1] = cg
+			bytes[i * 4 + 2] = cb
+			bytes[i * 4 + 3] = int(ink[i] * op)
+			found += 1
+	if found == 0:
+		App.status("No lines found inside the lasso — try raising Line detail")
+		return
+	_stroke_begin(cel)
+	var traced := Image.create_from_data(r.size.x, r.size.y, false, Image.FORMAT_RGBA8, bytes)
+	cel.image.blend_rect(traced, Rect2i(Vector2i.ZERO, r.size), r.position)
+	_mark_dirty(r)
+	_stroke_end("Lasso trace")
+	App.status("Traced the lines inside the lasso")
+	_redraw_art()
 
 
 func _do_pick(pos: Vector2) -> void:

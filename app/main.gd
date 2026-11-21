@@ -648,7 +648,7 @@ func _tool_key(k: InputEventKey) -> bool:
 	var map := {
 		KEY_B: "brush", KEY_P: "pencil", KEY_E: "eraser", KEY_G: "fill", KEY_I: "picker",
 		KEY_L: "line", KEY_U: "rect", KEY_O: "ellipse", KEY_V: "move", KEY_H: "hand",
-		KEY_S: "select", KEY_A: "lasso",
+		KEY_S: "select", KEY_A: "lasso", KEY_K: "lassoline",
 	}
 	if map.has(k.keycode):
 		App.set_tool(map[k.keycode])

@@ -132,6 +132,15 @@ func _run() -> void:
 	var tst := stats(tout, 0.5)
 	save(tout, "roto_on_cutout_out")
 	print("MATTE roto on cut-out          background removed=%3d%%  subject kept=%3d%%" % [int(tst.x * 100), int(tst.y * 100)])
+	# lasso trace: lines only, from a plain frame
+	var lmask := await toon.trace_lines(frame("room", 0.5))
+	var ink := 0
+	var ld := lmask.get_data()
+	for i in range(0, ld.size(), 7):
+		if ld[i] > 128:
+			ink += 1
+	print("MATTE lasso trace lines: %s ink samples %d (format %d)" % ["ok" if ink > 50 else "NONE", ink, lmask.get_format()])
+
 	# contact sheet for the log
 	var names := ["auto_room_in", "auto_room_out", "background_room_out", "object_room_out", "colour_green_out", "roto_on_cutout_out"]
 	var sheet := Image.create_empty(960, 360, false, Image.FORMAT_RGB8)

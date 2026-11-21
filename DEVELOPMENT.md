@@ -66,6 +66,16 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — Lasso lineart tool
+
+- **Tool:** `lassoline` (**K**, icon `lasso_ink`), after Lasso select. Options are in the Brush panel's "Lasso lineart" card (`App.lasso_mode`, `lasso_detail`, `lasso_behind`).
+- **The loop:** the hand-drawn loop is resampled and rounded (Chaikin; stronger for outlines). `CanvasView._poly_mask` builds an even-odd scanline mask.
+- **Modes:**
+  - **Trace lines inside:** flattens everything visible except the active layer on white (other layers, video frames, references, the 3D guide) and runs `ToonProcessor.trace_lines` (only the line chain: blur → XDoG → thicken → smooth; white = ink). Inside the loop the result is put on the active layer in the current colour; Size sets thickness, Line detail sets XDoG sensitivity.
+  - **Clean outline:** strokes the smoothed loop with the current brush (hardness ≥ 0.85).
+  - **Fill:** fills the loop with the current colour, optionally behind the existing pixels.
+- **Undo:** each lasso is one pixel undo step. CI checks that `trace_lines` finds lines.
+
 ## Update — background removal fixed on Forward+
 
 - **The bug:** in the Windows app (Forward+ renderer) background removal did nothing. The cleanup pass read the key pass through a BackBufferCopy / `hint_screen_texture`, and on Forward+ that copy loses alpha. Compatibility (OpenGL) was fine, so it never showed in an OpenGL test.

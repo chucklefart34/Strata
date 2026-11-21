@@ -54,6 +54,7 @@ const _PATHS := {
 	"help": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.5v.01"/>',
 	"orbit": '<ellipse cx="12" cy="12" rx="9.5" ry="4"/><circle cx="12" cy="12" r="2.5"/><path d="M19 9l2.5 3"/>',
 	"select": '<rect x="4" y="5" width="16" height="14" rx="1" stroke-dasharray="3 2.6"/>',
+	"lasso_ink": '<path d="M11 4c4.6 0 8 2.2 8 5s-3.4 5-8 5-8-2.2-8-5 3.4-5 8-5z" stroke-dasharray="3 2.6"/><path d="M14.5 21l1-3.5 4.5-4.5 2 2-4.5 4.5z"/><path d="M5.5 12.5c-.8 1.5-.4 3 1 3.8"/>',
 	"lasso": '<path d="M12 4c5 0 8.5 2.4 8.5 5.5S17 15 12 15s-8.5-2.4-8.5-5.5S7 4 12 4z" stroke-dasharray="3 2.6"/><path d="M6.5 13.5c-1 1.6-.7 3.6 1 4.5 1.2.6 2 1.7 1.5 3"/>',
 	"import": '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
 	"image": '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',

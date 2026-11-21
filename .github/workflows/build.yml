@@ -58,6 +58,7 @@ jobs:
           timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-driver vulkan --script res://tools/matte_test.gd > matte.log 2>&1 || true
           grep "^MATTE" matte.log || true
           if ! grep -q "MATTE TEST done" matte.log; then echo "::error::Matte test did not finish"; tail -n 40 matte.log; exit 1; fi
+          if grep -q "lasso trace lines: NONE" matte.log; then echo "::error::Lasso trace found no lines"; exit 1; fi
           if grep "^MATTE" matte.log | grep -v "object" | grep -qE "removed= *[0-4]?[0-9]%|kept= *[0-4]?[0-9]%"; then
             echo "::error::Background removal is not working (see MATTE lines above)"; exit 1
           fi

@@ -15,6 +15,7 @@ const TOOL_INFO := [
 	["", "", ""],
 	["select", "select", "Rectangle select (S)\nDrag to select · drag inside to move · corners scale\nCtrl+C/X/V copy, cut, paste · Delete clears · Enter applies · Esc cancels"],
 	["lasso", "lasso", "Lasso select (A)\nDraw around an area to select it freehand"],
+	["lassoline", "lasso_ink", "Lasso lineart (K)\nDraw a loop around something. Pick what it does in the Brush panel:\nTrace lines from the picture inside · Clean outline · Fill"],
 	["move", "move", "Move drawing (V)\nDrag to reposition the current drawing"],
 	["hand", "hand", "Hand (H)\nPan the view — or hold Space"],
 ]
