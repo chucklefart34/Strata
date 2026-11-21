@@ -308,24 +308,6 @@ func add_photos(layer: LayerData, frame: int, images: Array, hold: int, label: S
 	_cels_action(label, layer, after, maxi(s.frame_count, f))
 
 
-## Puts canvas-sized images on `layer` as drawings ({frame: Image}),
-## replacing any drawing already on those frames. One undo step.
-func add_drawings(layer: LayerData, images: Dictionary, label: String) -> void:
-	if images.is_empty():
-		return
-	var after := layer.cels.duplicate()
-	var last := 0
-	for f in images.keys():
-		var img: Image = images[f]
-		var cel := CelData.create_blank(App.project.width, App.project.height)
-		cel.image = img
-		cel.mark_changed()
-		after[int(f)] = cel
-		last = maxi(last, int(f))
-	var s := App.current_scene()
-	_cels_action(label, layer, after, maxi(s.frame_count, last + 1))
-
-
 ## Stop motion: removes the photo at `frame`; the scene ends after the new
 ## last photo if this was the end.
 func remove_photo(layer: LayerData, frame: int, hold: int) -> void:

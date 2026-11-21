@@ -19,6 +19,7 @@ var _trim_timer: Timer
 
 func _ready() -> void:
 	settings.load(SETTINGS_PATH)
+	_forget_ai_settings()
 	_autosave_timer = Timer.new()
 	_autosave_timer.wait_time = AUTOSAVE_SECONDS
 	_autosave_timer.timeout.connect(_on_autosave)
@@ -32,6 +33,19 @@ func _ready() -> void:
 
 
 # ================================================================ settings
+
+## The AI drawing service was removed: delete its saved settings (API keys).
+func _forget_ai_settings() -> void:
+	if not settings.has_section("app"):
+		return
+	var changed := false
+	for key in settings.get_section_keys("app"):
+		if str(key).begins_with("ai_"):
+			settings.erase_section_key("app", key)
+			changed = true
+	if changed:
+		settings.save(SETTINGS_PATH)
+
 
 func get_setting(key: String, default: Variant = null) -> Variant:
 	return settings.get_value("app", key, default)

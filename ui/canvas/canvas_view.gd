@@ -462,7 +462,7 @@ func draw_over(ci: CanvasItem) -> void:
 
 	if _active and App.tool == LASSO_LINE and _lasso_path.size() > 1:
 		var lc: Color = App.color
-		lc.a = 0.9
+		lc.a = 1.0
 		var lw := maxf(1.5 / zoom, App.brush_size if App.lasso_mode == "outline" else 1.5 / zoom)
 		ci.draw_polyline(_lasso_path, Color(1, 1, 1, 0.7), lw + 2.0 / zoom, true)
 		ci.draw_polyline(_lasso_path, lc, lw, true)
@@ -902,10 +902,14 @@ func _dab(p: Vector2, pressure: float) -> void:
 		var hard: float = App.brush_hardness
 		if tool == "pencil":
 			hard = 1.0
-		elif SHAPE_TOOLS.has(tool) or tool == LASSO_LINE:
+		elif SHAPE_TOOLS.has(tool):
 			hard = maxf(hard, 0.85)
 		var c: Color = App.color
 		c.a = _flow()
+		if tool == LASSO_LINE:
+			# lasso outlines are solid ink: hard edge, no soft build-up
+			hard = 1.0
+			c.a = 1.0
 		r = BrushEngine.paint_dab(img, p, size_px, hard, c)
 	_mark_dirty(r)
 
@@ -1158,11 +1162,12 @@ func _lasso_trace(poly: PackedVector2Array, r: Rect2i) -> void:
 	var cb := c.b8
 	var found := 0
 	for i in m.size():
-		if m[i] != 0 and ink[i] > 8:
+		if m[i] != 0 and ink[i] > 90:
 			bytes[i * 4] = cr
 			bytes[i * 4 + 1] = cg
 			bytes[i * 4 + 2] = cb
-			bytes[i * 4 + 3] = int(ink[i] * op)
+			# solid ink: a short ramp keeps the edge smooth without a soft glow
+			bytes[i * 4 + 3] = int(clampi((int(ink[i]) - 90) * 255 / 70, 0, 255) * op)
 			found += 1
 	if found == 0:
 		App.status("No lines found inside the lasso — try raising Line detail")
