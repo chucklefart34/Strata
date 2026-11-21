@@ -141,8 +141,42 @@ func _run() -> void:
 			ink += 1
 	print("MATTE lasso trace lines: %s ink samples %d (format %d)" % ["ok" if ink > 50 else "NONE", ink, lmask.get_format()])
 
+	# layer Border effect: two overlapping colour shapes on a clear layer
+	var shapes := Image.create_empty(W, H, false, Image.FORMAT_RGBA8)
+	for y in H:
+		for x in W:
+			if Vector2(x - 300, y - 180).length() < 110:
+				shapes.set_pixel(x, y, Color(0.98, 0.8, 0.65))
+			if Vector2(x - 300, y - 110).length() < 70 and y < 150:
+				shapes.set_pixel(x, y, Color(0.35, 0.2, 0.15))
+	var bvp := SubViewport.new()
+	bvp.size = Vector2i(W, H)
+	bvp.transparent_bg = true
+	bvp.disable_3d = true
+	bvp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	root.add_child(bvp)
+	var brect := TextureRect.new()
+	brect.texture = ImageTexture.create_from_image(shapes)
+	brect.size = Vector2(W, H)
+	var bmat := ShaderMaterial.new()
+	bmat.shader = load("res://shaders/layer_boil.gdshader")
+	bmat.set_shader_parameter("tex_size", Vector2(W, H))
+	bmat.set_shader_parameter("border", 5.0)
+	bmat.set_shader_parameter("border_color", Color.BLACK)
+	bmat.set_shader_parameter("border_inner", true)
+	brect.material = bmat
+	bvp.add_child(brect)
+	await RenderingServer.frame_post_draw
+	var bout := bvp.get_texture().get_image()
+	bout.convert(Image.FORMAT_RGBA8)
+	var outside := bout.get_pixel(300 + 113, 180)  # just outside the face
+	var between := bout.get_pixel(300, 150)        # hair / face boundary
+	var inside := bout.get_pixel(300, 230)         # middle of the face
+	print("MATTE border effect: outside=%s between=%s inside=%s" % [outside.to_html(), between.to_html(), inside.to_html()])
+	save(bout, "border_out")
+
 	# contact sheet for the log
-	var names := ["auto_room_in", "auto_room_out", "background_room_out", "object_room_out", "colour_green_out", "roto_on_cutout_out"]
+	var names := ["auto_room_in", "auto_room_out", "background_room_out", "object_room_out", "colour_green_out", "border_out"]
 	var sheet := Image.create_empty(960, 360, false, Image.FORMAT_RGB8)
 	for i in names.size():
 		var im := Image.load_from_file(out_dir.path_join(str(names[i]) + ".png"))
