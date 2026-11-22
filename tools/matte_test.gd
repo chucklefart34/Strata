@@ -175,8 +175,38 @@ func _run() -> void:
 	print("MATTE border effect: outside=%s between=%s inside=%s" % [outside.to_html(), between.to_html(), inside.to_html()])
 	save(bout, "border_out")
 
+	# auto in-between: a ring moves 240 px right; the middle frame should be
+	# drawn halfway
+	var ka := Image.create_empty(W, H, false, Image.FORMAT_RGBA8)
+	var kb := Image.create_empty(W, H, false, Image.FORMAT_RGBA8)
+	for y in H:
+		for x in W:
+			var da := absf(Vector2(x - 180, y - 180).length() - 50.0)
+			var db := absf(Vector2(x - 420, y - 180).length() - 50.0)
+			if da < 4.0:
+				ka.set_pixel(x, y, Color.BLACK)
+			if db < 4.0:
+				kb.set_pixel(x, y, Color.BLACK)
+	var ib := InbetweenProcessor.new()
+	root.add_child(ib)
+	await ib.prepare(ka, kb)
+	for style in ["motion", "smear", "wipe"]:
+		var mid := await ib.frame(0.5, style, 0.45)
+		var sx := 0.0
+		var sw := 0.0
+		for y in range(0, H, 2):
+			for x in range(0, W, 2):
+				var a := mid.get_pixel(x, y).a
+				sx += x * a
+				sw += a
+		print("MATTE in-between %s: ink centre x=%d (expected about 300), ink=%d" % [style, int(sx / maxf(sw, 0.001)), int(sw)])
+		if style == "motion":
+			save(mid, "inbetween_motion")
+		elif style == "smear":
+			save(mid, "inbetween_smear")
+
 	# contact sheet for the log
-	var names := ["auto_room_in", "auto_room_out", "background_room_out", "object_room_out", "colour_green_out", "border_out"]
+	var names := ["auto_room_in", "auto_room_out", "background_room_out", "object_room_out", "inbetween_motion", "inbetween_smear"]
 	var sheet := Image.create_empty(960, 360, false, Image.FORMAT_RGB8)
 	for i in names.size():
 		var im := Image.load_from_file(out_dir.path_join(str(names[i]) + ".png"))

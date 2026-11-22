@@ -4,7 +4,7 @@ name: Diagnostics (matte test)
 # GPU and uploads the results. Only on the "diag" branch or by hand.
 on:
   push:
-    branches: [diag, diag2]
+    branches: [diag, diag2, diag3]
   workflow_dispatch:
 
 jobs:
