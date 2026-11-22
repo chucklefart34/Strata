@@ -111,7 +111,8 @@ func _run() -> void:
 		var f := fa + step
 		while f < fb:
 			_status.text = "Drawing frame %d…" % [f + 1]
-			made[f] = await _proc.frame(float(f - fa) / float(fb - fa), style, smear)
+			await get_tree().process_frame
+			made[f] = _proc.frame(float(f - fa) / float(fb - fa), style, smear)
 			f += step
 	Ops.add_drawings(layer, made, "Auto in-between")
 	_busy = false

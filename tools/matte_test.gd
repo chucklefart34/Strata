@@ -191,7 +191,7 @@ func _run() -> void:
 	root.add_child(ib)
 	await ib.prepare(ka, kb)
 	for style in ["motion", "smear", "wipe"]:
-		var mid := await ib.frame(0.5, style, 0.45)
+		var mid := ib.frame(0.5, style, 0.45)
 		var sx := 0.0
 		var sw := 0.0
 		for y in range(0, H, 2):
