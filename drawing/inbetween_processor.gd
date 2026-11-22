@@ -241,6 +241,17 @@ func _splat(acc: PackedFloat32Array, rgb: PackedFloat32Array, from_b: bool, t: f
 					rgb[o * 3 + 2] += col[j * 4 + 2] * a
 
 
+## How far the ink moves between the keyframes, in pixels (median-ish).
+func _typical_move() -> float:
+	if _a_move.is_empty():
+		return 0.0
+	var lens := PackedFloat32Array()
+	for i in range(0, _a_move.size(), maxi(1, _a_move.size() / 200)):
+		lens.append(_a_move[i].length())
+	lens.sort()
+	return lens[lens.size() / 2]
+
+
 ## One in-between at `t` (0 = first keyframe, 1 = next).
 func frame(t: float, style: String, smear: float) -> Image:
 	var n := _size.x * _size.y
@@ -255,8 +266,10 @@ func frame(t: float, style: String, smear: float) -> Image:
 			_splat(acc, rgb, true, 1.0, t, false, 0, 0.0, 0.0)
 		"smear":
 			summed = false
-			for s in 9:
-				var f := float(s) / 8.0 - 0.5
+			# enough copies that the streak is continuous over the distance
+			var steps := clampi(int(_typical_move() * smear / 3.0), 9, 48)
+			for s in steps:
+				var f := float(s) / float(steps - 1) - 0.5
 				var tt := clampf(t + f * smear, 0.0, 1.0)
 				var wgt := 1.0 - absf(f) * 1.1
 				_splat(acc, rgb, false, tt, wgt * (1.0 - tt) * 2.0, true, 0, 0.0, 0.0)
@@ -267,8 +280,9 @@ func frame(t: float, style: String, smear: float) -> Image:
 			var edge := lerpf(1.0 + soft, -soft, t)
 			_splat(acc, rgb, false, t, 1.0, true, 1, edge, soft)
 			_splat(acc, rgb, true, t, 1.0, true, 2, edge, soft)
-			for s in 7:
-				var f := float(s) / 6.0 - 0.5
+			var wsteps := clampi(int(_typical_move() * smear / 4.0), 7, 32)
+			for s in wsteps:
+				var f := float(s) / float(wsteps - 1) - 0.5
 				var tt := clampf(t + f * smear, 0.0, 1.0)
 				var wgt := (1.0 - absf(f) * 1.2) * 0.8
 				_splat(acc, rgb, false, tt, wgt, true, 2, edge, soft * 1.6)

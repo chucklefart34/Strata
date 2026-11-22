@@ -113,6 +113,20 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - **Shift+← / →** step one frame; `,` and `.` still step one frame too.
 - Arrows still work normally inside text fields.
 
+## Update — Auto in-between (no AI)
+
+- **Panel:** `ui/panels/inbetween_panel.gd` in Animate. Fills the gaps between drawings on the selected layer (around the playhead, or every gap), every N frames, in one undo step (`Ops.add_drawings`).
+- **Reading the motion** (`drawing/inbetween_processor.gd`):
+  - GPU block matching (`shaders/drawing_flow.gdshader`) on blurred ink density.
+  - Coarse (1/8) then fine (1/4), in both directions (A→B on A's pixels, B→A on B's).
+  - The search starts from the drawing's overall centroid shift, so big moves work.
+- **Drawing the frames:** every inked pixel of both keyframes is pushed along its own motion (forward splatting on the CPU) to the in-between time.
+  - **Motion:** weighted sum; agreement = solid, lone ghosts stay faint.
+  - **Smear:** max of many copies spread along the path; the copy count grows with the distance.
+  - **Wipe:** B sweeps in along the main motion direction, smeared at the edge.
+  - **Fade:** plain cross-fade.
+- **Test:** a ring moving 240 px is drawn exactly halfway (CI checks the motion frame lands within ±20 px).
+
 ## Update — lasso Shape mode + layer Border effect (Clip Studio style)
 
 - **Reference:** "lasso fill + border effect" lineart, where solid colour blocks get an automatic outline.
