@@ -25,6 +25,7 @@ var _b_move := PackedVector2Array()  # full move from A to B (seen from B)
 var _wipe_dir := Vector2.RIGHT
 var _wipe_range := Vector2(-0.7, 0.7)
 var _size := Vector2i(1920, 1080)
+var _shift := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -90,6 +91,8 @@ func prepare(a: Image, b: Image) -> void:
 	var cb := ImageTexture.create_from_image(density(ink_b, coarse, 3.0))
 	var fa := ImageTexture.create_from_image(density(ink_a, fine, 2.0))
 	var fb := ImageTexture.create_from_image(density(ink_b, fine, 2.0))
+	# starting guess: how far the drawing moved as a whole (coarse pixels)
+	_shift = _centre(density(ink_b, coarse, 1.0)) - _centre(density(ink_a, coarse, 1.0))
 	# B seen from A (where each bit of A went) and A seen from B
 	var c_ab := await _flow(ca, cb, coarse, null, COARSE_MAX, 24.0, COARSE_MAX, true)
 	var f_ab := await _flow(fa, fb, fine, ImageTexture.create_from_image(c_ab), FINE_MAX, 8.0, COARSE_MAX, true)
@@ -106,6 +109,19 @@ func prepare(a: Image, b: Image) -> void:
 	_measure_direction()
 
 
+## Ink-weighted centre of a density map, in its pixels.
+static func _centre(den: Image) -> Vector2:
+	var d := den.get_data()
+	var w := den.get_width()
+	var sum := Vector2.ZERO
+	var tot := 0.0
+	for i in d.size():
+		if d[i] > 20:
+			sum += Vector2(i % w, i / w) * d[i]
+			tot += d[i]
+	return sum / tot if tot > 0.0 else Vector2(w, den.get_height()) * 0.5
+
+
 ## Runs one flow pass. `a_to_b`: matches A's content in B (result lives on
 ## A's pixels); otherwise B's content in A (on B's pixels).
 func _flow(ta: Texture2D, tb: Texture2D, sz: Vector2i, init: Texture2D, out_max: float, search: float, init_max: float, a_to_b: bool) -> Image:
@@ -117,6 +133,8 @@ func _flow(ta: Texture2D, tb: Texture2D, sz: Vector2i, init: Texture2D, out_max:
 	_flow_mat.set_shader_parameter("cur_tex", cur)
 	_flow_mat.set_shader_parameter("prev_tex", prev)
 	_flow_mat.set_shader_parameter("has_init", init != null)
+	# A(p) ≈ B(p - d): A's content moved by -d; B(p) ≈ A(p - d): by +d
+	_flow_mat.set_shader_parameter("base_shift", -_shift if a_to_b else _shift)
 	if init != null:
 		_flow_mat.set_shader_parameter("init_tex", init)
 	_flow_mat.set_shader_parameter("init_max", init_max)

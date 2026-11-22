@@ -15,6 +15,7 @@ uniform float init_scale = 2.0;   // its pixels → these pixels
 uniform float max_motion = 64.0;  // output encoding range (these pixels)
 uniform float search = 16.0;      // search radius (these pixels)
 uniform vec2 res = vec2(480.0, 270.0);
+uniform vec2 base_shift = vec2(0.0); // starting guess without init_tex (these pixels)
 
 float cost(vec2 uv, vec2 d) {
 	vec2 px = 1.0 / res;
@@ -29,7 +30,7 @@ float cost(vec2 uv, vec2 d) {
 }
 
 void fragment() {
-	vec2 pm = vec2(0.0);
+	vec2 pm = base_shift;
 	if (has_init) {
 		pm = (texture(init_tex, UV).rg - 0.5) * 2.0 * init_max * init_scale;
 	}
