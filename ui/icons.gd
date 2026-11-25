@@ -63,6 +63,12 @@ const _PATHS := {
 	"audio": '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/>',
 	"clapper": '<path d="M4 10h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 10l-.6-3.2 15.4-2.9.6 3.2z"/><path d="M8.5 6.3l2 3.4M13.5 5.4l2 3.4"/>',
 	"reset": '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>',
+	"spark": '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
+	"chat": '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+	"check": '<path d="M4.5 12.5l5 5 10-11"/>',
+	"flag": '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>',
+	"queue": '<path d="M4 6h16M4 12h16M4 18h10"/><path d="M17 16l3 2-3 2z"/>',
+	"settings": '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
 }
 
 const _RAW := {

@@ -11,7 +11,7 @@ const RESOLUTIONS := [
 	["Square — 1080 × 1080", 1080, 1080],
 	["Vertical — 1080 × 1920", 1080, 1920],
 ]
-const FPS := [12, 15, 24, 25, 30]
+const FPS := [12, 15, 18, 24, 25, 30]
 const UI_SCALES := [["Automatic", 0.0], ["75%", 0.75], ["90%", 0.9], ["100%", 1.0], ["125%", 1.25], ["150%", 1.5], ["175%", 1.75], ["200%", 2.0]]
 const STEPS := [
 	["Draw", "Create a project, then draw your character and background on separate layers in Draw."],
