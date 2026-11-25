@@ -259,7 +259,7 @@ func _update() -> void:
 	var q_buttons: Dictionary = _groups["quality"]
 	for val in q_buttons.keys():
 		var qb: Button = q_buttons[val]
-		qb.disabled = not (fmt == "mp4" or fmt == "mov")
+		qb.disabled = not (fmt == "mp4" or fmt == "mov" or fmt == "webm")
 	_transparent.disabled = is_video
 	if is_video:
 		_transparent.set_pressed_no_signal(false)
@@ -276,6 +276,8 @@ func _update() -> void:
 	match fmt:
 		"mp4", "mov":
 			parts.append("H.264 %.1f Mbps" % (ExportSettings.video_bitrate(_opts) / 1000000.0))
+		"webm":
+			parts.append("VP9 %.1f Mbps" % (ExportSettings.video_bitrate(_opts) / 1000000.0))
 		"gif":
 			parts.append("GIF (up to 960 px wide, 25 fps)")
 		"png":

@@ -9,14 +9,14 @@ extends RefCounted
 ##   res: int                short side in pixels (480, 720, 1080, 1440, 2160), 0 = project
 ##   fps: int                output frame rate, 0 = project
 ##   quality: String         "lower", "recommended", "higher"
-##   format: String          "mp4", "mov", "gif", "png"
+##   format: String          "mp4", "mov", "webm", "gif", "png"
 ##   transparent: bool       PNG frames only
 ##   audio: bool             include the sound
 
 const RESOLUTIONS := [[480, "480p"], [720, "720p"], [1080, "1080p"], [1440, "2K"], [2160, "4K"]]
-const FRAME_RATES := [12, 24, 25, 30, 50, 60]
+const FRAME_RATES := [12, 18, 24, 25, 30, 50, 60]
 const QUALITIES := [["lower", "Lower"], ["recommended", "Recommended"], ["higher", "Higher"]]
-const FORMATS := [["mp4", "MP4"], ["mov", "MOV"], ["gif", "GIF"], ["png", "PNG frames"]]
+const FORMATS := [["mp4", "MP4"], ["mov", "MOV"], ["webm", "WebM"], ["gif", "GIF"], ["png", "PNG frames"]]
 ## H.264 bits per pixel per frame for each quality (≈ 5 / 9 / 16 Mbps at 1080p30).
 const BPP := {"lower": 0.08, "recommended": 0.15, "higher": 0.26}
 const AUDIO_BPS := 192000
@@ -103,6 +103,16 @@ static func ffmpeg_args(pattern: String, in_fps: int, wav: String, o: Dictionary
 			"[0:v]fps=%d,scale=%d:-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" % [mini(fps, 25), gw],
 			"-loop", "0",
 		]))
+	elif fmt == "webm":
+		var wbr := video_bitrate(o)
+		args.append_array(PackedStringArray([
+			"-vf", vf + ",pad=ceil(iw/2)*2:ceil(ih/2)*2",
+			"-c:v", "libvpx-vp9", "-b:v", str(wbr), "-maxrate", str(int(wbr * 1.5)), "-bufsize", str(wbr * 2),
+			"-row-mt", "1", "-deadline", "good", "-cpu-used", "2",
+			"-pix_fmt", "yuv420p", "-r", str(fps),
+		]))
+		if use_audio:
+			args.append_array(PackedStringArray(["-c:a", "libopus", "-b:a", "160k", "-shortest"]))
 	else:
 		var br := video_bitrate(o)
 		args.append_array(PackedStringArray([

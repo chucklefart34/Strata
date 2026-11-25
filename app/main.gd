@@ -12,6 +12,7 @@ const WORKSPACES := [
 	["audio", "Audio", "audio"],
 	["scenes", "Scenes", "layers"],
 	["episode", "Episode", "clapper"],
+	["ai", "AI Studio", "spark"],
 ]
 
 var _workspaces: Dictionary = {}
@@ -146,6 +147,7 @@ func _build() -> void:
 		"audio": AudioWorkspace.new(),
 		"scenes": SceneWorkspace.new(),
 		"episode": EpisodeWorkspace.new(),
+		"ai": AiStudioWorkspace.new(),
 	}
 	(ws["episode"] as EpisodeWorkspace).depth_workspace = ws["depth"]
 	for id in ws.keys():
@@ -219,8 +221,9 @@ func switch_to(id: String) -> void:
 		var c: Control = _workspaces[k]
 		c.visible = k == id
 	_current = id
-	var b: Button = _tabs[id]
-	b.set_pressed_no_signal(true)
+	for k in _tabs.keys():
+		var b: Button = _tabs[k]
+		b.set_pressed_no_signal(k == id)
 
 
 ## Applies any floating selection first so undo never fights with it.
@@ -293,10 +296,10 @@ func open_export() -> void:
 static func workspaces_for(mode: String) -> Array:
 	match mode:
 		"2d":
-			return ["home", "characters", "draw", "animate", "audio", "scenes", "episode"]
+			return ["home", "characters", "draw", "animate", "audio", "scenes", "episode", "ai"]
 		"stopmotion":
-			return ["home", "capture", "draw", "animate", "audio", "scenes", "episode"]
-	return ["home", "characters", "draw", "animate", "depth", "audio", "scenes", "episode"]
+			return ["home", "capture", "draw", "animate", "audio", "scenes", "episode", "ai"]
+	return ["home", "characters", "draw", "animate", "depth", "audio", "scenes", "episode", "ai"]
 
 
 ## Shows only the tabs this project uses (all but Capture when none is open).

@@ -22,6 +22,8 @@ ProjectIO="*res://core/project_io.gd"
 Rigs="*res://core/rig_manager.gd"
 Audio="*res://core/audio_engine.gd"
 Updater="*res://core/updater.gd"
+Studio="*res://ai/studio_store.gd"
+AiJobs="*res://ai/job_runner.gd"
 
 [display]
 

@@ -66,6 +66,45 @@ The spec recommends making the first milestone "drawing studio + animation timel
 - Scene settings: name, length (frames and seconds), background color.
 - Layer stack overview, plus add-a-layer-by-role buttons (Background, Midground, Character, Foreground, Effect), each at a sensible default depth.
 
+## Update — AI Studio (AI animation team, frame by frame)
+
+A new **AI Studio** workspace (all project kinds). Everything is GDScript inside Strata, so it ships in the same `Strata.exe`; image generation and the director are external services Strata talks to over HTTP.
+
+**Architecture**
+
+| Part | File | Runs |
+| --- | --- | --- |
+| Settings (per computer, keys never in projects) | `ai/ai_config.gd` → `user://ai_studio.cfg` | — |
+| Async HTTP + multipart | `ai/ai_http.gd` | — |
+| ComfyUI client: `/system_stats`, `/object_info`, `/upload/image`, `/prompt`, `/history`, `/view`, `/interrupt`, `/ws` progress | `ai/comfy_client.gd` | LOCAL |
+| Graph builder: checkpoint → LoRA → IP-Adapter (character sheets / style refs) → ControlNet (your rough) → KSampler (txt2img or img2img) → save; or a custom API-format workflow with `{{placeholders}}` | `ai/comfy_workflow.gd` | LOCAL |
+| Studio store ("Studio" autoload): style profile, references, cast, shots/drawings/takes, jobs, chat → `<project>/ai_studio/studio.json` (atomic + .bak, saved ~1 s after every change) | `ai/studio_store.gd` | — |
+| Render queue ("AiJobs" autoload): one picture per job, background → sheets → keys/breakdowns → in-betweens; pause/resume/cancel/retry; recovery after restart (re-polls the job's ComfyUI prompt id first) | `ai/job_runner.gd` | LOCAL |
+| Director: Claude Messages API with a forced `studio_actions` tool (structured actions), or Ollama `/api/chat` with a JSON schema; vision QC and reference descriptions (Claude) | `ai/director.gd` | CLOUD or LOCAL |
+| Reference analysis (palette k-means, light key, contrast, saturation, warmth, line density, solid blacks → prompt words) | `ai/ref_analyzer.gd` | LOCAL |
+| Frame QC (flicker, continuity pops, colour/costume drift, background change, silhouette jumps, off-model vs. sheet; each drawing judged against both neighbours) | `ai/frame_qc.gd` | LOCAL |
+| Picture helpers (sizes, cover/contain, backdrop keying, contact sheets) | `ai/ai_image.gd` | LOCAL |
+| UI | `ui/workspaces/ai_studio_workspace.gd`, `ui/ai/*.gd` | — |
+| Timeline placement (one undo step per layer) | `Ops.place_drawings` in `core/edit_ops.gd` | — |
+
+**How a shot is made**
+1. The director (or you, in Shots) gives keys and breakdowns on the exposure grid. `Studio._expand` makes every drawing: on ones every frame, on twos every 2nd, etc.; frames without a key become in-betweens whose description sits between their neighbours.
+2. With "Background on its own layer" (default), the background plate is drawn once and each character drawing on a flat backdrop (keyed out on placement), so backgrounds don't flicker and the camera can move layers.
+3. Keys: text (+ IP-Adapter from the character's sheets, or the shot's first key when there are no sheets; + your rough from the "Pose guide" layer through ControlNet or img2img). Breakdowns without a rough start from the previous key. In-betweens: img2img over a **motion guide** from `InbetweenProcessor` (the figure moved along its path to time t; GPU) or a cross-fade where the GPU isn't available. Same seed across a shot; new takes vary it.
+4. The first take of a drawing is used; later takes (revisions, QC fixes, relighting) wait for **Approve / Reject**.
+5. **Place on timeline** puts the chosen takes on "AI · shot" / "AI BG · shot" layers at the playhead (re-placing updates them), applies the camera preset, and from there it's normal Strata: draw over any frame, onion skin, export.
+
+**Other changes**: 18 fps in new projects, the frame-rate menu and export; **WebM** export (VP9 + Opus); tab highlighting fixed when a workspace is switched from code. `ProjectIO` still deletes the *old* `ai_*` keys from settings.cfg; the AI Studio uses its own file.
+
+**Testing**: `tools/ai_studio_test.tscn` runs end to end against `tools/mock_ai_server.py` (fake ComfyUI that validates graphs like ComfyUI does + fake Claude/Ollama): sheets, director plan → 12 drawings, motion/blend guides, IP-Adapter/LoRA in graphs, QC (local + vision), fixes as takes, revisions, approve/reject, placement + undo, relight, pause + crash recovery + reload, Ollama, bad key, WebM args. `.github/workflows/ai_test.yml` runs it on pull requests, headless and on a software GPU.
+
+**Known limits / next steps**
+- Not yet run against a real ComfyUI install and real models from this environment; the graph matches ComfyUI's API and IP-Adapter Plus' node names, and unknown required inputs are filled from `/object_info`. First real run: check Setup → Check connection, generate a character sheet, then a 1-second shot.
+- In-between quality depends on the model; the motion guide helps a lot but fast overlapping limbs can still need a redraw (select → Redraw selected) or a hand fix in Draw.
+- Lip sync for AI drawings comes from the director's mouth notes on keys; phoneme-timed mouth drawings from the Audio track are a next step.
+- Character LoRA training (for the strongest consistency) is not built in; a trained LoRA can be chosen in Setup.
+- Next: phoneme-driven mouth drawings, per-shot ControlNet pose (OpenPose) from Strata puppets, multiple characters on separate layers, batch QC after every shot, shot → episode assembly from the director.
+
 ## Update — Lasso lineart tool
 
 - **Tool:** `lassoline` (**K**, icon `lasso_ink`), after Lasso select. Options are in the Brush panel's "Lasso lineart" card (`App.lasso_mode`, `lasso_detail`, `lasso_behind`).

@@ -3,7 +3,7 @@ extends HBoxContainer
 ## Playback controls, frame readout, frame rate, scene length, onion skin and
 ## drawing/exposure editing — shown above every timeline.
 
-const FPS_CHOICES := [12, 15, 24, 25, 30]
+const FPS_CHOICES := [12, 15, 18, 24, 25, 30]
 
 var full: bool = true
 var _play: Button

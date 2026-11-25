@@ -326,6 +326,52 @@ func add_drawings(layer: LayerData, images: Dictionary, label: String) -> void:
 	_cels_action(label, layer, after, maxi(s.frame_count, last + 1))
 
 
+## AI Studio: puts canvas-sized images ({timeline frame: Image}) onto a layer
+## as drawings covering frames [start, end). With `existing` it replaces
+## that layer's drawings in the range; otherwise it makes a new layer
+## (backgrounds at the bottom, others above the selected layer). A blank
+## drawing at `end` stops the last one from holding past the shot. One undo step.
+func place_drawings(layer_name: String, role: String, images: Dictionary, existing: LayerData, start: int, end: int, scene: SceneData, at_bottom: bool = false) -> void:
+	if scene == null or images.is_empty():
+		return
+	var w: int = App.project.width
+	var h: int = App.project.height
+	var cels := {} if existing == null else existing.cels.duplicate()
+	for k in cels.keys():
+		if int(k) >= start and int(k) < end:
+			cels.erase(k)
+	for f in images.keys():
+		var cel := CelData.create_blank(w, h)
+		cel.image = images[f]
+		cel.mark_changed()
+		cels[int(f)] = cel
+	var length := maxi(scene.frame_count, end)
+	if end < length and not cels.has(end):
+		cels[end] = CelData.create_blank(w, h)
+	if existing != null:
+		ur.create_action("Place AI shot")
+		ur.add_do_method(_set_cels.bind(existing, cels, scene, length))
+		ur.add_undo_method(_set_cels.bind(existing, existing.cels.duplicate(), scene, scene.frame_count))
+		ur.commit_action()
+		return
+	var l := LayerData.new(layer_name, role)
+	l.cels = cels
+	var after := scene.layers.duplicate()
+	var idx := 0 if at_bottom else clampi(App.layer_index + 1, 0, after.size())
+	after.insert(idx, l)
+	ur.create_action("Place AI shot")
+	ur.add_do_method(_set_layers_and_length.bind(scene, after, idx, length))
+	ur.add_undo_method(_set_layers_and_length.bind(scene, scene.layers.duplicate(), App.layer_index, scene.frame_count))
+	ur.commit_action()
+
+
+func _set_layers_and_length(scene: SceneData, arr: Array, select: int, length: int) -> void:
+	scene.frame_count = length
+	_set_layers(scene, arr, select)
+	App.notify_timeline()
+	App.notify_pixels()
+
+
 ## Stop motion: removes the photo at `frame`; the scene ends after the new
 ## last photo if this was the end.
 func remove_photo(layer: LayerData, frame: int, hold: int) -> void:

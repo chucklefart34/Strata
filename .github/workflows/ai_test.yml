@@ -1,0 +1,54 @@
+name: AI Studio test
+
+# Runs on pull requests (and by hand): compiles everything and runs the
+# AI Studio end-to-end test against a mock ComfyUI + mock director
+# (tools/mock_ai_server.py), headless and with a real (software) GPU so the
+# motion in-between guides are exercised too. Doesn't build or publish apps.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ai-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: "4.7.2"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot (Linux)
+        run: |
+          set -euo pipefail
+          V="${GODOT_VERSION}-stable"
+          curl -fsSL --retry 3 -o godot.zip "https://github.com/godotengine/godot/releases/download/${V}/Godot_v${V}_linux.x86_64.zip"
+          unzip -q godot.zip
+          echo "GODOT=$PWD/Godot_v${V}_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Compile check
+        run: |
+          "$GODOT" --headless --path . --import > import.log 2>&1 || true
+          timeout 120 "$GODOT" --headless --path . --script res://tools/ci_check.gd > compile.log 2>&1 || true
+          tail -n 2 compile.log
+          if grep -qE "SCRIPT ERROR|Parse Error|CHECK FAILED|Compile Error" import.log compile.log; then
+            grep -E "SCRIPT ERROR|Parse Error|CHECK FAILED|Compile Error" -A3 import.log compile.log | head -n 80
+            exit 1
+          fi
+      - name: Start the mock ComfyUI + director
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 tools/mock_ai_server.py 8199 > mock.log 2>&1 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8199/system_stats
+      - name: AI Studio test (headless)
+        run: |
+          timeout 400 "$GODOT" --headless --path . res://tools/ai_studio_test.tscn > ai.log 2>&1 || true
+          grep -E "AITEST|SCRIPT ERROR" ai.log
+          grep -q "AITEST done, 0 failure" ai.log
+      - name: AI Studio test (software GPU, motion guides)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers xvfb > /dev/null
+          rm -f /tmp/mock_graphs.jsonl
+          timeout 500 xvfb-run -a -s "-screen 0 1600x960x24" "$GODOT" --path . --rendering-driver vulkan res://tools/ai_studio_test.tscn > ai_gpu.log 2>&1 || true
+          grep -E "AITEST|SCRIPT ERROR" ai_gpu.log
+          grep -q "AITEST done, 0 failure" ai_gpu.log
+          grep -q "guide: motion guide" ai_gpu.log
